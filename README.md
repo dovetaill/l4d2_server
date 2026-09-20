@@ -12,7 +12,7 @@
 - 服务器目录：`/home/wwwroot/l4d2/server`。
 - 游戏目录：`/home/wwwroot/l4d2/server/left4dead2`。
 - 启动脚本：[`scripts/start_server.sh`](scripts/start_server.sh)。
-- 当前公开目标：12 名真人 Survivor；引擎和 MultiSlots 配置保留到 31 槽，后续可扩展到 16 名 Survivor。
+- 当前公开目标：最多 16 名真人混合阵营；典型配置为 12 名 Survivor + 最多 4 名真人 Infected。引擎和 MultiSlots 配置保留到 31 槽。
 - 最新管理员插件启动探针：60 个 SourceMod 插件、12 个扩展加载成功，没有 `Failed` 或 `Bad Load`。
 - 尚未完成真实 Steam 客户端的 1/4/8/12 人功能测试；`!admin` 菜单、SteamID 认证、战斗行为和 Tank 平衡仍需要实际进服验证。
 - 已知启动噪声：部分地图会出现 `Cbuf_AddText: buffer overflow`，目前不等于插件加载失败，需在长期运行时继续观察。
@@ -98,6 +98,17 @@ quit
 | 投票踢人 | `!vk`，由 Votekick 插件提供 |
 | 特殊弹切换 | `Shift + Reload` |
 
+玩家也可以在 Campaign 中自愿加入真人感染者阵营：
+
+| 操作 | 用法 |
+|---|---|
+| 加入感染者 | `!infected` 或 `!inf` |
+| 回到 Survivor | `!survivor` |
+| 选择普通特感 | `!zclass` |
+| 加入 / 退出 Tank 抽签 | `!tankqueue` / `!notank` |
+
+这是 Campaign PvPvE，不是 Versus：没有换边计分、半场换边或竞技比分。感染者积分仍然复用 Campaign Shop，跨章节保留，换 Campaign 或 `mission_lost` 清零；没有永久等级、经验、属性或转生。
+
 商城积分是**当前战役货币**：保存在内存中，跨章节保留；进入新 Campaign 或触发 `mission_lost` 时清零，不写永久成长数据库。
 
 ## SourceMod 管理员配置
@@ -182,6 +193,7 @@ server/left4dead2/addons/sourcemod/scripting/third_party/
 | `l4d2_end_safearea_teleport` | 最终安全区域 60 秒强制收尾 | 传送仍存活但未进安全屋的玩家，不主动处死玩家。 |
 | `l4d2_clear_thirdstrike` | 药丸 / 肾上腺素减少倒地次数 | 最低保留一次倒地机会，不能无限洗白黑白状态。 |
 | `l4d2_switch_upgrade_ammo` | Shift + Reload 切换特殊弹药 | 是本服维护版本；不要和 Multiple Equipments 或 Improved Multiple Equipment 同时安装。 |
+| `l4d2_pve_infected_core` | 阵营切换、普通 SI 职业、感染者商城、Tank 抽签、感染者奖励和 HUD | 依赖 InfectedBots 3.0.8、Left4DHooks 和 Campaign Shop。Playable Witch 保持独立关闭。 |
 
 ### 依赖和加载顺序
 
@@ -221,6 +233,8 @@ l4d2_pve_admin
 | SI 数量 | InfectedBots |
 | 普通感染者数量 | Dynamic Infected Balancer |
 | Tank HP / Tank 技能 | Mutant Tanks |
+| Coop 真人感染者基础 | InfectedBots 3.0.8 |
+| PvPvE 阵营切换 / Tank 抽签 / 感染者商城 | `l4d2_pve_infected_core` |
 | 友伤 | No Friendly-Fire |
 
 禁止再安装会直接修改上述同一系统的替代插件，否则可能出现积分重复、回血叠加、Tank 属性覆盖或菜单行为不一致。

@@ -8,7 +8,7 @@ Generated: 2026-09-20 (America/New_York)
 - Server root: `/home/wwwroot/l4d2/server`
 - Game root: `/home/wwwroot/l4d2/server/left4dead2`
 - Launcher: `/home/wwwroot/l4d2/scripts/start_server.sh`
-- Target public capacity: 12 survivors
+- Target public capacity: 16 mixed players; typical profile is 12 Survivor + up to 4 human Infected
 - L4DToolZ engine capacity: 31 slots; architecture is ready for a future 16-survivor profile
 - Current launch probe: port 27022, map `c1m1_hotel`
 
@@ -55,6 +55,7 @@ Actions 4.0.1 was kept in `sources/third_party/` but rejected by SourceMod 1.12 
 | `l4d2_end_safearea_teleport.sp` | `l4d2_end_safearea_teleport.smx` | 60-second final-area grace teleport |
 | `l4d2_clear_thirdstrike.sp` | `l4d2_clear_thirdstrike.smx` | pills/adrenaline reduce revive count to minimum 1 |
 | `l4d2_switch_upgrade_ammo.sp` | `l4d2_switch_ammo.smx` | Shift+Reload cycles regular/incendiary/explosive |
+| `l4d2_pve_infected_core.sp` | `l4d2_pve_infected_core.smx` | Campaign PvPvE team switching, human SI classes, infected economy, Tank lottery and HUD |
 
 ## Deliberately Not Installed
 
@@ -66,3 +67,6 @@ RPGMaker, SkyRPG, PerkMod, Gun XP, ranks, levels, experience, prestige, attribut
 - The server was launched as root for probes only. Production should run as `l4d2srv`.
 - The Item Hint plugin still reports that Use Priority Patch is recommended. It was not fetched from a random mirror.
 - SourceMod's historical `errors_20260920.log` contains only pre-fix failures from `nextmap.smx`, missing Upgrade Pack gamedata, and Actions 4.0.1. The later successful probes added no new SourceMod error entries.
+- `l4dinfectedbots` reads the local `data/l4dinfectedbots/pve_pvpve.cfg` profile. Its own `coop_versus_tank_playable` remains disabled because Tank ownership is deliberately handled by the custom lottery; Mutant Tanks remains the Tank ability owner.
+- The five local Mutant Tanks profiles enable Human Support with bounded manual ability charges and cooldowns (two or three abilities per profile). This is configuration for the existing Mutant Tanks Human Support path, not a second Tank ability system.
+- Playable Witch is intentionally not enabled. The infected core leaves the Witch purchase entry disabled until a separate current SourceMod/Left4DHooks module exposes a validated control native.

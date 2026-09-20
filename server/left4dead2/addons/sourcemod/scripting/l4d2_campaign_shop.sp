@@ -109,9 +109,11 @@ public void OnPluginStart()
     RegPluginLibrary("l4d2_campaign_shop");
     CreateNative("L4D2CampaignShop_GetPoints", Native_GetPoints);
     CreateNative("L4D2CampaignShop_AddPoints", Native_AddPoints);
+    CreateNative("L4D2CampaignShop_RemovePoints", Native_RemovePoints);
     CreateNative("L4D2CampaignShop_SetPoints", Native_SetPoints);
 
     RegConsoleCmd("sm_buy", Command_Buy, "Open the campaign shop.");
+    RegConsoleCmd("sm_shop", Command_Buy, "Open the campaign shop.");
     RegConsoleCmd("sm_points", Command_Points, "Show current campaign points.");
     RegConsoleCmd("sm_money", Command_Points, "Show current campaign points.");
 
@@ -335,7 +337,7 @@ public void Event_MissionLost(Event event, const char[] name, bool dontBroadcast
 
 void AddPoints(int client, int amount, const char[] reason)
 {
-    if (!IsRealSurvivor(client) || amount <= 0)
+    if (!IsRealPlayer(client) || amount <= 0)
     {
         return;
     }
@@ -394,6 +396,17 @@ bool IsRealSurvivor(int client)
     return IsValidClient(client) && !IsFakeClient(client) && GetClientTeam(client) == TEAM_SURVIVOR;
 }
 
+bool IsRealPlayer(int client)
+{
+    if (!IsValidClient(client) || IsFakeClient(client))
+    {
+        return false;
+    }
+
+    int team = GetClientTeam(client);
+    return team == TEAM_SURVIVOR || team == TEAM_INFECTED;
+}
+
 bool IsValidClient(int client)
 {
     return client > 0 && client <= MaxClients && IsClientInGame(client);
@@ -402,7 +415,7 @@ bool IsValidClient(int client)
 public any Native_GetPoints(Handle plugin, int numParams)
 {
     int client = GetNativeCell(1);
-    if (!IsRealSurvivor(client))
+    if (!IsRealPlayer(client))
     {
         return -1;
     }
@@ -413,7 +426,7 @@ public any Native_AddPoints(Handle plugin, int numParams)
 {
     int client = GetNativeCell(1);
     int amount = GetNativeCell(2);
-    if (!IsRealSurvivor(client) || amount <= 0)
+    if (!IsRealPlayer(client) || amount <= 0)
     {
         return -1;
     }
@@ -422,11 +435,28 @@ public any Native_AddPoints(Handle plugin, int numParams)
     return g_iPoints[client];
 }
 
+public any Native_RemovePoints(Handle plugin, int numParams)
+{
+    int client = GetNativeCell(1);
+    int amount = GetNativeCell(2);
+    if (!IsRealPlayer(client) || amount <= 0)
+    {
+        return -1;
+    }
+
+    g_iPoints[client] -= amount;
+    if (g_iPoints[client] < 0)
+    {
+        g_iPoints[client] = 0;
+    }
+    return g_iPoints[client];
+}
+
 public any Native_SetPoints(Handle plugin, int numParams)
 {
     int client = GetNativeCell(1);
     int points = GetNativeCell(2);
-    if (!IsRealSurvivor(client))
+    if (!IsRealPlayer(client))
     {
         return -1;
     }
