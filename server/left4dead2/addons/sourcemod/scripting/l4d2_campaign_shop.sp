@@ -13,7 +13,7 @@ public Plugin myinfo =
     name = "L4D2 Campaign Shop",
     author = "Codex",
     description = "In-memory campaign-scoped PvE shop; no permanent progression",
-    version = "1.0.0",
+    version = "1.0.1",
     url = ""
 };
 
@@ -29,6 +29,8 @@ ConVar g_hReviveReward;
 ConVar g_hRescueReward;
 ConVar g_hDefibReward;
 ConVar g_hHealReward;
+ConVar g_hAdminSteamId;
+ConVar g_hAdminPoints;
 
 int g_iPoints[MAXPLAYERS + 1];
 int g_iCommonKills[MAXPLAYERS + 1];
@@ -105,6 +107,8 @@ public void OnPluginStart()
     g_hRescueReward = CreateConVar("l4d2_campaign_shop_rescue_reward", "3", "Points for rescuing a hanging teammate.", _, true, 0.0);
     g_hDefibReward = CreateConVar("l4d2_campaign_shop_defib_reward", "10", "Points for using a defibrillator.", _, true, 0.0);
     g_hHealReward = CreateConVar("l4d2_campaign_shop_heal_reward", "5", "Points for healing a teammate.", _, true, 0.0);
+    g_hAdminSteamId = CreateConVar("l4d2_campaign_shop_admin_steamid", "", "Steam2 or SteamID64 that receives the configured admin campaign balance.");
+    g_hAdminPoints = CreateConVar("l4d2_campaign_shop_admin_points", "9999999", "Campaign points automatically granted to the configured admin Steam2 or SteamID64.", _, true, 0.0);
 
     RegPluginLibrary("l4d2_campaign_shop");
     CreateNative("L4D2CampaignShop_GetPoints", Native_GetPoints);
@@ -129,6 +133,11 @@ public void OnPluginStart()
     AutoExecConfig(true, "l4d2_campaign_shop");
 }
 
+public void OnConfigsExecuted()
+{
+    ApplyAdminPointsToConnected();
+}
+
 public void OnMapStart()
 {
     char map[64], campaign[64];
@@ -146,6 +155,11 @@ public void OnClientPutInServer(int client)
 {
     g_iPoints[client] = 0;
     g_iCommonKills[client] = 0;
+}
+
+public void OnClientPostAdminCheck(int client)
+{
+    ApplyAdminPoints(client);
 }
 
 public void OnClientDisconnect(int client)
@@ -335,6 +349,58 @@ public void Event_MissionLost(Event event, const char[] name, bool dontBroadcast
     ResetPoints();
 }
 
+void ApplyAdminPointsToConnected()
+{
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        if (IsValidClient(client))
+        {
+            ApplyAdminPoints(client);
+        }
+    }
+}
+
+void ApplyAdminPoints(int client)
+{
+    if (!IsConfiguredAdmin(client))
+    {
+        return;
+    }
+
+    g_iPoints[client] = g_hAdminPoints.IntValue;
+    if (g_hNotify.BoolValue)
+    {
+        PrintToChat(client, "\x04[BUY]\x01 Admin campaign balance: %d points.", g_iPoints[client]);
+    }
+}
+
+bool IsConfiguredAdmin(int client)
+{
+    if (!IsValidClient(client) || IsFakeClient(client))
+    {
+        return false;
+    }
+
+    char wanted[64], auth2[64], auth64[64];
+    g_hAdminSteamId.GetString(wanted, sizeof(wanted));
+    TrimString(wanted);
+    if (wanted[0] == '\0')
+    {
+        return false;
+    }
+
+    if (GetClientAuthId(client, AuthId_Steam2, auth2, sizeof(auth2), true) && StrEqual(auth2, wanted, false))
+    {
+        return true;
+    }
+    return GetClientAuthId(client, AuthId_SteamID64, auth64, sizeof(auth64), true) && StrEqual(auth64, wanted, false);
+}
+
+int GetPointCap(int client)
+{
+    return IsConfiguredAdmin(client) ? g_hAdminPoints.IntValue : g_hMaxPoints.IntValue;
+}
+
 void AddPoints(int client, int amount, const char[] reason)
 {
     if (!IsRealPlayer(client) || amount <= 0)
@@ -344,9 +410,11 @@ void AddPoints(int client, int amount, const char[] reason)
 
     int oldPoints = g_iPoints[client];
     g_iPoints[client] = oldPoints + amount;
-    if (g_iPoints[client] > g_hMaxPoints.IntValue)
+
+    int cap = GetPointCap(client);
+    if (g_iPoints[client] > cap)
     {
-        g_iPoints[client] = g_hMaxPoints.IntValue;
+        g_iPoints[client] = cap;
     }
 
     int gained = g_iPoints[client] - oldPoints;
@@ -363,6 +431,7 @@ void ResetPoints()
         g_iPoints[i] = 0;
         g_iCommonKills[i] = 0;
     }
+    ApplyAdminPointsToConnected();
 }
 
 int ResolveEventClient(Event event, const char[] field)
@@ -465,9 +534,10 @@ public any Native_SetPoints(Handle plugin, int numParams)
     {
         points = 0;
     }
-    if (points > g_hMaxPoints.IntValue)
+    int cap = GetPointCap(client);
+    if (points > cap)
     {
-        points = g_hMaxPoints.IntValue;
+        points = cap;
     }
     g_iPoints[client] = points;
     return points;
