@@ -162,6 +162,94 @@ quit
 
 插件只使用 SourceMod 管理权限；不会创建第二套管理员数据库。它把功能加入原生 `!admin` 菜单，并提供命令行入口。
 
+## 自制插件特别说明
+
+以下插件是本服务器自行维护的 SourcePawn 模块，不是从插件网站直接下载的不可审计二进制。每个模块同时保留 `.sp` 源码和编译后的 `.smx`，源码位于：
+
+```text
+server/left4dead2/addons/sourcemod/scripting/
+server/left4dead2/addons/sourcemod/scripting/third_party/
+```
+
+### 自制模块清单
+
+| 插件 | 负责内容 | 特别说明 |
+|---|---|---|
+| `l4d2_campaign_shop` | `!buy` 战役商城、战役内积分 | 积分只保存在当前战役内存中，不提供永久成长；对外提供积分 API。 |
+| `l4d2_combat_rewards` | 击杀回血、Second Wind、Tank 掉宝、加特林部署 | 统一处理战斗奖励，不要再叠加其他回血、Second Wind 或 Tank Loot 插件。 |
+| `l4d2_pve_admin` | `!admin` PvE 管理菜单、给装备、积分管理、测试生成、审计日志 | 依赖 SourceMod `adminmenu.smx`、Left4DHooks 和 `l4d2_campaign_shop` 的 native。 |
+| `l4d2_double_jump` | 一次额外空中跳跃 | 只允许二段跳，不是 BunnyHop 或无限跳。 |
+| `l4d2_end_safearea_teleport` | 最终安全区域 60 秒强制收尾 | 传送仍存活但未进安全屋的玩家，不主动处死玩家。 |
+| `l4d2_clear_thirdstrike` | 药丸 / 肾上腺素减少倒地次数 | 最低保留一次倒地机会，不能无限洗白黑白状态。 |
+| `l4d2_switch_upgrade_ammo` | Shift + Reload 切换特殊弹药 | 是本服维护版本；不要和 Multiple Equipments 或 Improved Multiple Equipment 同时安装。 |
+
+### 依赖和加载顺序
+
+自制插件按以下关系运行：
+
+```text
+SourceMod + MetaMod
+        ↓
+Left4DHooks
+        ↓
+l4d2_campaign_shop
+        ↓
+l4d2_combat_rewards / 其他战斗模块
+        ↓
+l4d2_pve_admin
+```
+
+实际加载时 SourceMod 会按插件文件加载，但排查问题时必须按这个依赖关系检查。特别是：
+
+- `l4d2_pve_admin.smx` 不是独立插件。没有 `l4d2_campaign_shop.smx` 时，给装备、玩家管理和测试生成仍可用，但积分 API 菜单和积分命令会明确提示不可用。
+- `l4d2_pve_admin.smx` 需要 `adminmenu.smx` 才能把 `L4D2 PvE 管理` 注册到 `!admin`；基础命令仍可以通过控制台执行。
+- `l4d2_combat_rewards.smx`、`l4d2_end_safearea_teleport.smx` 等插件依赖 Left4DHooks 的事件、实体或生成接口。不要在服务器运行时卸载 Left4DHooks。
+- 如果某个自制插件显示 `Failed` 或 `Bad Load`，先检查依赖和错误日志，不要用另一个插件重复实现同一功能。
+
+### 自制插件和第三方插件的边界
+
+自制插件只负责本服没有合适稳定实现的功能，以及把多个功能收敛到一个清晰的所有权边界。第三方插件仍负责多人修复、特感数量、普通感染者数量、Tank 技能、反友伤和公共服投票等基础能力。
+
+同一系统只能有一个控制者：
+
+| 系统 | 控制者 |
+|---|---|
+| 商城积分 | `l4d2_campaign_shop` |
+| 击杀回血 / Second Wind / Tank Loot | `l4d2_combat_rewards` |
+| 管理员认证 | SourceMod 原生 Admin API |
+| 管理员菜单和本服测试功能 | `l4d2_pve_admin` |
+| SI 数量 | InfectedBots |
+| 普通感染者数量 | Dynamic Infected Balancer |
+| Tank HP / Tank 技能 | Mutant Tanks |
+| 友伤 | No Friendly-Fire |
+
+禁止再安装会直接修改上述同一系统的替代插件，否则可能出现积分重复、回血叠加、Tank 属性覆盖或菜单行为不一致。
+
+### 特别的更新规则
+
+1. 修改 `.sp` 后，必须使用服务器当前的 SourceMod 1.12 `spcomp` 重新编译对应 `.smx`。
+2. 修改 `l4d2_campaign_shop.inc` 的 native 声明或实现时，必须同时重新编译 `l4d2_campaign_shop.sp` 和 `l4d2_pve_admin.sp`。
+3. 不要只替换 `.smx` 而不保存对应源码，也不要只提交源码而忘记更新实际服务器使用的 `.smx`。
+4. 更新前先备份 `addons/sourcemod/plugins/`、自制源码和相关 `cfg`；生产服务器优先停服后替换并重启。
+5. 更新后依次检查：
+
+   ```text
+   sm exts list
+   sm plugins list
+   sm_who
+   !admin
+   sm_pveinfo
+   ```
+
+6. 如果出现 `native is not bound`、`Plugin failed to compile`、`Bad Load` 或积分 API 不可用，立即恢复上一版成对的 `.smx`，不要让新旧 Shop/Admin 二进制混用。
+
+### 自制插件的回滚重点
+
+- 管理插件异常：先把 `l4d2_pve_admin.smx` 移到 `plugins/disabled/`，不影响基础战斗插件。
+- 商城 API 异常：必须同时回滚 `l4d2_campaign_shop.smx` 和 `l4d2_pve_admin.smx`，因为管理员插件依赖商城 native。
+- 战斗奖励异常：只回滚 `l4d2_combat_rewards.smx`，不要同时删除 Mutant Tanks 或 InfectedBots。
+- 修改源码后重新编译失败时，不要覆盖正在运行的 `.smx`；先修复编译错误或恢复上一个可用二进制。
+
 ### 游戏内菜单
 
 服主或有相应权限的管理员输入：
