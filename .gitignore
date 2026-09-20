@@ -1,0 +1,38 @@
+# Runtime and deployment state
+logs/
+incoming/*
+!incoming/.gitkeep
+backups/
+archives/
+tmp/
+Steam/
+tools/steamcmd/
+
+# Steam/game runtime payloads; keep configs, addons, scripts and docs tracked
+server/steamapps/
+server/update/
+server/bin/
+server/*.log
+server/left4dead2/*.log
+server/left4dead2/*.vpk
+server/left4dead2_dlc*/
+server/left4dead2/maps/*.bsp
+server/left4dead2/sound/
+server/left4dead2/models/
+server/left4dead2/materials/
+server/left4dead2/particles/
+server/left4dead2/media/
+
+# SourceMod runtime logs, generated databases and crash artifacts
+server/left4dead2/addons/sourcemod/configs/geoip/
+server/left4dead2/addons/sourcemod/logs/
+server/left4dead2/addons/sourcemod/data/*.sqlite
+server/left4dead2/addons/sourcemod/data/*.db
+server/left4dead2/crash_*.dmp
+server/left4dead2/*.mdmp
+*.core
+
+# Large downloaded source archives are retained on disk but not committed
+sources/**/*.tar.gz
+sources/**/*.tgz
+sources/**/*.zip
