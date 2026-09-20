@@ -373,6 +373,14 @@ git diff
 git log --oneline --decorate -10
 ```
 
+如果 Git 因服务器目录属于 `l4d2srv` 而提示 `detected dubious ownership`，先确认路径确实是本项目，再执行一次：
+
+```bash
+git config --global --add safe.directory /home/wwwroot/l4d2
+```
+
+这只是在当前系统用户的 Git 配置中信任该工作目录，不会改变服务器文件所有者。
+
 提交自己的修改：
 
 ```bash
@@ -394,8 +402,11 @@ git show HEAD -- README.md
 
 ```bash
 git remote add origin <你的 Git 远程地址>
+git remote -v
 git push -u origin main
 ```
+
+如果远程已经存在，使用 `git remote set-url origin <新的远程地址>`，不要重复执行 `git remote add origin`。
 
 建议发布一个部署基线标签：
 
