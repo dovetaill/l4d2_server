@@ -7,7 +7,7 @@
 #include <l4dinfectedbots>
 #include <l4d2_campaign_shop>
 
-#define PLUGIN_VERSION "0.1.0"
+#define PLUGIN_VERSION "0.1.1"
 
 #define TEAM_SPECTATOR 1
 #define TEAM_SURVIVOR 2
@@ -45,6 +45,10 @@ ConVar g_cvSICooldownMultiplier;
 ConVar g_cvSIRespawnSeconds;
 ConVar g_cvTankHealthMultiplier;
 ConVar g_cvTankLimit;
+ConVar g_cvTankSpawnMinInterval;
+ConVar g_cvTankHumanPerChapter;
+ConVar g_cvTankPlayerPerChapter;
+ConVar g_cvTankPlayerCooldown;
 ConVar g_cvLifeHealthCost;
 ConVar g_cvLifeCooldownCost;
 ConVar g_cvGhostCost;
@@ -83,8 +87,10 @@ int g_iDamageProgress[MAXPLAYERS + 1];
 int g_iDamageRewarded[MAXPLAYERS + 1];
 int g_iTankArrivals;
 int g_iPendingTankBuyer;
+int g_iHumanTankControlsThisChapter;
 
 float g_fLastDamage[MAXPLAYERS + 1];
+float g_fLastTankSpawnTime;
 float g_fLastSwitch[MAXPLAYERS + 1];
 float g_fScaledAbilityEnd[MAXPLAYERS + 1];
 float g_fNextHUD;
@@ -93,6 +99,8 @@ bool g_bLeftSafeArea;
 bool g_bFinaleLocked;
 char g_sCampaign[64];
 StringMap g_hSwitchCooldown;
+StringMap g_hTankChapterCount;
+StringMap g_hTankControlLast;
 Handle g_hHUDTimer;
 
 static const char g_sClassNames[SI_CLASS_COUNT][] =
@@ -117,6 +125,11 @@ public void OnPluginStart()
     g_cvSIRespawnSeconds = CreateConVar("l4d2_pve_infected_si_respawn_seconds", "22.0", "Target Ghost respawn wait for human SI.", FCVAR_NOTIFY, true, 0.0);
     g_cvTankHealthMultiplier = CreateConVar("l4d2_pve_infected_tank_health_multiplier", "1.15", "Optional health multiplier for a human controlled Tank.", FCVAR_NOTIFY, true, 1.0);
     g_cvTankLimit = CreateConVar("l4d2_pve_infected_tank_limit", "1", "Maximum simultaneous Tanks allowed by the custom core.", FCVAR_NOTIFY, true, 0.0, true, 8.0);
+    g_cvTankSpawnMinInterval = CreateConVar("l4d2_pve_infected_tank_spawn_min_interval", "600.0", "Minimum seconds between non-finale Tank spawns, including purchased Tanks.", FCVAR_NOTIFY, true, 0.0);
+    g_cvTankHumanPerChapter = CreateConVar("l4d2_pve_infected_tank_human_per_chapter", "1", "Maximum Tanks handed to human players per chapter. Zero disables human Tank control.", FCVAR_NOTIFY, true, 0.0, true, 8.0);
+    g_cvTankPlayerPerChapter = CreateConVar("l4d2_pve_infected_tank_player_per_chapter", "1", "Maximum Tank controls per player per chapter. Zero disables human Tank control.", FCVAR_NOTIFY, true, 0.0, true, 8.0);
+    g_cvTankPlayerCooldown = CreateConVar("l4d2_pve_infected_tank_player_cooldown", "1800.0", "Seconds before the same player may control another Tank across chapter transitions.", FCVAR_NOTIFY, true, 0.0);
+    HookConVarChange(g_cvTankSpawnMinInterval, ConVarChanged_TankSpawnMinInterval);
     g_cvLifeHealthCost = CreateConVar("l4d2_pve_infected_life_health_cost", "25", "Campaign points for current-life SI health boost.", FCVAR_NOTIFY, true, 0.0);
     g_cvLifeCooldownCost = CreateConVar("l4d2_pve_infected_life_cooldown_cost", "30", "Campaign points for current-life SI cooldown boost.", FCVAR_NOTIFY, true, 0.0);
     g_cvGhostCost = CreateConVar("l4d2_pve_infected_ghost_cost", "25", "Campaign points for the current-life Ghost wait reduction.", FCVAR_NOTIFY, true, 0.0);
@@ -171,14 +184,40 @@ public void OnPluginStart()
     HookEvent("player_left_start_area", Event_LeftStartArea, EventHookMode_PostNoCopy);
 
     g_hSwitchCooldown = new StringMap();
+    g_hTankChapterCount = new StringMap();
+    g_hTankControlLast = new StringMap();
     g_hHUDTimer = CreateTimer(0.25, Timer_HUD, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     AutoExecConfig(true, "l4d2_pve_infected_core");
+    ApplyTankDirectorInterval();
     ServerCommand("exec sourcemod/pve_infected_balance.cfg");
+}
+
+public void ConVarChanged_TankSpawnMinInterval(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+    ApplyTankDirectorInterval();
+}
+
+void ApplyTankDirectorInterval()
+{
+    float interval = g_cvTankSpawnMinInterval.FloatValue;
+    ConVar directorMin = FindConVar("director_tank_min_interval");
+    if (directorMin != null && interval > 0.0)
+    {
+        directorMin.SetFloat(interval);
+    }
+
+    ConVar directorMax = FindConVar("director_tank_max_interval");
+    if (directorMax != null && interval > 0.0 && directorMax.FloatValue < interval)
+    {
+        directorMax.SetFloat(interval);
+    }
 }
 
 public void OnPluginEnd()
 {
     delete g_hSwitchCooldown;
+    delete g_hTankChapterCount;
+    delete g_hTankControlLast;
     delete g_hHUDTimer;
 }
 
@@ -516,7 +555,7 @@ void BuyInfectedItem(int client, const char[] item)
             PrintToChat(client, "\x04[TANK]\x01 本章节 Tank 降临次数已用完。");
             return;
         }
-        if (!CanSpawnPurchasedTank())
+        if (!CanSpawnPurchasedTank(client))
         {
             PrintToChat(client, "\x04[TANK]\x01 当前阶段不允许额外生成 Tank，未扣分。");
             return;
@@ -693,12 +732,28 @@ public void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
     }
 }
 
+public Action L4D_OnSpawnTank(const float vecPos[3], const float vecAng[3])
+{
+    if (!CanUseCore() || g_bFinaleLocked || g_iPendingTankBuyer > 0)
+    {
+        return Plugin_Continue;
+    }
+
+    float elapsed = GetEngineTime() - g_fLastTankSpawnTime;
+    if (g_fLastTankSpawnTime > 0.0 && elapsed < g_cvTankSpawnMinInterval.FloatValue)
+    {
+        return Plugin_Handled;
+    }
+    return Plugin_Continue;
+}
+
 public void Event_TankSpawn(Event event, const char[] name, bool dontBroadcast)
 {
     if (!CanUseCore() || CountAliveTanks() > g_cvTankLimit.IntValue)
     {
         return;
     }
+    g_fLastTankSpawnTime = GetEngineTime();
     CreateTimer(0.2, Timer_TankLottery, _, TIMER_FLAG_NO_MAPCHANGE);
 }
 
@@ -835,7 +890,7 @@ public Action Timer_TankLottery(Handle timer)
     }
 
     int candidate = 0;
-    if (g_iPendingTankBuyer > 0 && IsEligibleRealPlayer(g_iPendingTankBuyer) && !g_bTankControl[g_iPendingTankBuyer])
+    if (g_iPendingTankBuyer > 0 && IsTankControlAllowed(g_iPendingTankBuyer))
     {
         candidate = g_iPendingTankBuyer;
     }
@@ -868,6 +923,7 @@ public Action Timer_TankLottery(Handle timer)
     ChangeClientTeam(candidate, TEAM_INFECTED);
     L4D_ReplaceTank(tank, candidate);
     g_bTankControl[candidate] = true;
+    RecordTankControl(candidate);
     g_bTankRecent[candidate] = true;
     g_bTankPriority[candidate] = false;
     g_iTankSurvivorBot[candidate] = survivorBot;
@@ -1121,6 +1177,55 @@ int GetDynamicHumanLimit()
     return dynamicLimit;
 }
 
+bool IsTankControlAllowed(int client)
+{
+    if (!IsEligibleRealPlayer(client) || g_bTankControl[client])
+    {
+        return false;
+    }
+    if (g_iHumanTankControlsThisChapter >= g_cvTankHumanPerChapter.IntValue)
+    {
+        return false;
+    }
+
+    char steamId[64];
+    if (!GetClientAuthId(client, AuthId_SteamID64, steamId, sizeof(steamId), true))
+    {
+        return false;
+    }
+
+    int count = 0;
+    if (g_hTankChapterCount.GetValue(steamId, count) && count >= g_cvTankPlayerPerChapter.IntValue)
+    {
+        return false;
+    }
+
+    float last = 0.0;
+    if (g_cvTankPlayerCooldown.FloatValue > 0.0 && g_hTankControlLast.GetValue(steamId, last))
+    {
+        if (GetEngineTime() - last < g_cvTankPlayerCooldown.FloatValue)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void RecordTankControl(int client)
+{
+    char steamId[64];
+    if (!GetClientAuthId(client, AuthId_SteamID64, steamId, sizeof(steamId), true))
+    {
+        return;
+    }
+
+    int count = 0;
+    g_hTankChapterCount.GetValue(steamId, count);
+    g_hTankChapterCount.SetValue(steamId, count + 1);
+    g_hTankControlLast.SetValue(steamId, GetEngineTime());
+    g_iHumanTankControlsThisChapter++;
+}
+
 int PickTankCandidate()
 {
     int priority[MAXPLAYERS + 1];
@@ -1129,7 +1234,7 @@ int PickTankCandidate()
     int priorityCount, regularCount, recentCount;
     for (int client = 1; client <= MaxClients; client++)
     {
-        if (!IsEligibleRealPlayer(client) || !g_bTankQueue[client] || g_bTankControl[client])
+        if (!IsTankControlAllowed(client) || !g_bTankQueue[client])
         {
             continue;
         }
@@ -1161,14 +1266,26 @@ int PickTankCandidate()
     return 0;
 }
 
-bool CanSpawnPurchasedTank()
+bool CanSpawnPurchasedTank(int buyer)
 {
-    return CanUseCore() && g_bLeftSafeArea && !g_bFinaleLocked && CountAliveTanks() < g_cvTankLimit.IntValue && FindLiveSurvivor() > 0 && GetConfiguredTankLimit() > 0;
+    if (!CanUseCore() || !g_bLeftSafeArea || g_bFinaleLocked || !IsTankControlAllowed(buyer))
+    {
+        return false;
+    }
+    if (CountAliveTanks() >= g_cvTankLimit.IntValue || FindLiveSurvivor() <= 0 || GetConfiguredTankLimit() <= 0)
+    {
+        return false;
+    }
+    if (g_fLastTankSpawnTime > 0.0 && GetEngineTime() - g_fLastTankSpawnTime < g_cvTankSpawnMinInterval.FloatValue)
+    {
+        return false;
+    }
+    return true;
 }
 
 bool SpawnPurchasedTank(int buyer)
 {
-    if (!CanSpawnPurchasedTank() || GetFeatureStatus(FeatureType_Native, "L4D2_SpawnTank") != FeatureStatus_Available)
+    if (!CanSpawnPurchasedTank(buyer) || GetFeatureStatus(FeatureType_Native, "L4D2_SpawnTank") != FeatureStatus_Available)
     {
         return false;
     }
@@ -1498,6 +1615,8 @@ void ResetCampaignState()
 {
     g_iTankArrivals = 0;
     g_iPendingTankBuyer = 0;
+    g_iHumanTankControlsThisChapter = 0;
+    g_hTankChapterCount.Clear();
     for (int client = 1; client <= MaxClients; client++)
     {
         g_bTankPriority[client] = false;

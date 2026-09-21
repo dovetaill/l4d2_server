@@ -31,6 +31,7 @@ server/left4dead2/addons/sourcemod/*
 server/left4dead2/addons/sourcemod/configs/*
 !server/left4dead2/addons/sourcemod/configs/admins_simple.ini
 !server/left4dead2/addons/sourcemod/configs/adminmenu_custom.txt
+!server/left4dead2/addons/sourcemod/configs/pve_help_content.cfg
 
 # Custom compiled plugins. Third-party installed binaries remain runtime-only.
 server/left4dead2/addons/sourcemod/plugins/*
@@ -42,6 +43,7 @@ server/left4dead2/addons/sourcemod/plugins/*
 !server/left4dead2/addons/sourcemod/plugins/l4d2_pve_help_menu.smx
 !server/left4dead2/addons/sourcemod/plugins/l4d2_pve_admin.smx
 !server/left4dead2/addons/sourcemod/plugins/l4d2_pve_infected_core.smx
+!server/left4dead2/addons/sourcemod/plugins/l4d2_pve_damage_display.smx
 !server/left4dead2/addons/sourcemod/plugins/l4d2_switch_ammo.smx
 
 # Custom SourcePawn sources and the one reviewed third-party source.
@@ -53,6 +55,7 @@ server/left4dead2/addons/sourcemod/scripting/*
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_help_menu.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_infected_core.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_damage_display.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_switch_upgrade_ammo.sp
 !server/left4dead2/addons/sourcemod/scripting/include/
 !server/left4dead2/addons/sourcemod/scripting/third_party/
@@ -68,6 +71,7 @@ server/left4dead2/cfg/*
 !server/left4dead2/cfg/server.cfg
 !server/left4dead2/cfg/pve_core.cfg
 !server/left4dead2/cfg/pve_balance.cfg
+!server/left4dead2/cfg/pve_runtime.cfg
 !server/left4dead2/cfg/sourcemod/
 
 server/left4dead2/cfg/sourcemod/*
@@ -78,6 +82,8 @@ server/left4dead2/cfg/sourcemod/*
 !server/left4dead2/cfg/sourcemod/l4d2_switch_ammo.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_pve_help_menu.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_pve_infected_core.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_damage_display.cfg
+!server/left4dead2/cfg/sourcemod/double_jump.cfg
 !server/left4dead2/cfg/sourcemod/l4dinfectedbots.cfg
 !server/left4dead2/cfg/sourcemod/l4dmultislots.cfg
 !server/left4dead2/cfg/sourcemod/pve_infected_balance.cfg
@@ -90,6 +96,7 @@ server/left4dead2/addons/sourcemod/data/l4dinfectedbots/*
 !server/left4dead2/addons/sourcemod/data/mutant_tanks/
 server/left4dead2/addons/sourcemod/data/mutant_tanks/*
 !server/left4dead2/addons/sourcemod/data/mutant_tanks/mutant_tanks.cfg
+!server/left4dead2/addons/sourcemod/data/mutant_tanks/mutant_tanks_detours.cfg
 
 # Generated logs, local databases and crash artifacts outside ignored runtime.
 *.log
@@ -109,6 +116,13 @@ server/left4dead2/addons/sourcemod/data/mutant_tanks/*
 Thumbs.db
 .idea/
 .vscode/
+__pycache__/
+*.py[cod]
 
 # H opens the player-visible Chinese MOTD/help page.
 !server/left4dead2/motd.txt
+
+# SourcePawn compile dependencies required by the PvE admin/core plugins.
+!server/left4dead2/addons/sourcemod/scripting/include/left4dhooks*.inc
+!server/left4dead2/addons/sourcemod/scripting/include/l4dinfectedbots.inc
+!server/left4dead2/addons/sourcemod/scripting/include/mutant_tanks.inc

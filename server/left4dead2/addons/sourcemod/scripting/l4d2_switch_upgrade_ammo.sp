@@ -13,7 +13,7 @@ public Plugin myinfo =
     name = "L4D2 Switch Upgrade Ammo",
     author = "Codex",
     description = "Shift+Reload switching with continuous incendiary and explosive ammo",
-    version = "1.1.0",
+    version = "1.2.0",
     url = ""
 };
 
@@ -25,9 +25,20 @@ ConVar g_hInfiniteUpgradeInterval;
 
 Handle g_hUpgradeAmmoTimer;
 bool g_bCooldown[MAXPLAYERS + 1];
+ArrayList g_hLimitedWeapons;
+ArrayList g_hInfiniteWeapons;
+
+public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int errMax)
+{
+    RegPluginLibrary("l4d2_switch_upgrade_ammo");
+    CreateNative("L4D2SwitchAmmo_MarkLimited", Native_MarkLimited);
+    return APLRes_Success;
+}
 
 public void OnPluginStart()
 {
+    g_hLimitedWeapons = new ArrayList();
+    g_hInfiniteWeapons = new ArrayList();
     g_hEnable = CreateConVar("l4d2_switch_ammo_enable", "1", "Enable Shift+Reload upgrade ammo switching.", _, true, 0.0, true, 1.0);
     g_hInfinite = CreateConVar("l4d2_switch_ammo_infinite_load", "1", "Keep a large upgraded-ammo counter when switching.", _, true, 0.0, true, 1.0);
     g_hInfiniteUpgradeEnable = CreateConVar("l4d2_switch_ammo_infinite_upgrade_enable", "1", "Keep picked-up incendiary and explosive ammo replenished.", _, true, 0.0, true, 1.0);
@@ -37,6 +48,12 @@ public void OnPluginStart()
     HookConVarChange(g_hInfiniteUpgradeEnable, ConVarChanged_AmmoFeature);
     HookConVarChange(g_hInfiniteUpgradeInterval, ConVarChanged_AmmoInterval);
     AutoExecConfig(true, "l4d2_switch_ammo");
+}
+
+public void OnMapStart()
+{
+    g_hLimitedWeapons.Clear();
+    g_hInfiniteWeapons.Clear();
 }
 
 public void OnConfigsExecuted()
@@ -71,6 +88,35 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
         return Plugin_Continue;
     }
 
+    if (IsTrackedWeapon(g_hLimitedWeapons, active))
+    {
+        int limitedBits = GetEntProp(active, Prop_Send, "m_upgradeBitVec");
+        int limitedAmmo = HasEntProp(active, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded")
+            ? GetEntProp(active, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded")
+            : 0;
+        if (limitedAmmo <= 0)
+        {
+            PrintToChat(client, "\x04[弹药]\x01 当前有限升级弹已经用完，请重新购买。");
+        }
+        else if (!(limitedBits & (UPGRADE_INCENDIARY | UPGRADE_EXPLOSIVE)))
+        {
+            PrintToChat(client, "\x04[弹药]\x01 当前有限升级弹状态无效，请重新购买。");
+        }
+        else
+        {
+            PrintToChat(client, "\x04[弹药]\x01 当前是商城购买的有限升级弹，打完后才能切换。");
+        }
+        StartClientCooldown(client);
+        return Plugin_Continue;
+    }
+
+    if (!IsTrackedWeapon(g_hInfiniteWeapons, active))
+    {
+        PrintToChat(client, "\x04[弹药]\x01 请先使用燃烧或高爆升级包解锁无限升级弹。 ");
+        StartClientCooldown(client);
+        return Plugin_Continue;
+    }
+
     int upgrades = GetEntProp(active, Prop_Send, "m_upgradeBitVec");
     int current = 0;
     if (upgrades & UPGRADE_INCENDIARY)
@@ -88,16 +134,16 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     if (next == 1)
     {
         upgrades |= UPGRADE_INCENDIARY;
-        strcopy(label, sizeof(label), "Incendiary");
+        strcopy(label, sizeof(label), "燃烧弹");
     }
     else if (next == 2)
     {
         upgrades |= UPGRADE_EXPLOSIVE;
-        strcopy(label, sizeof(label), "Explosive");
+        strcopy(label, sizeof(label), "高爆弹");
     }
     else
     {
-        strcopy(label, sizeof(label), "Regular");
+        strcopy(label, sizeof(label), "普通弹药");
     }
 
     SetEntProp(active, Prop_Send, "m_upgradeBitVec", upgrades);
@@ -105,10 +151,15 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     {
         SetEntProp(active, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", g_hInfiniteUpgradeCount.IntValue);
     }
-    PrintToChat(client, "\x04[AMMO]\x01 %s upgrade ammo selected.", label);
+    PrintToChat(client, "\x04[弹药]\x01 已切换为 %s。", label);
+    StartClientCooldown(client);
+    return Plugin_Continue;
+}
+
+public void StartClientCooldown(int client)
+{
     g_bCooldown[client] = true;
     CreateTimer(0.35, Timer_ClearCooldown, GetClientSerial(client), TIMER_FLAG_NO_MAPCHANGE);
-    return Plugin_Continue;
 }
 
 public Action Timer_ClearCooldown(Handle timer, int serial)
@@ -184,14 +235,70 @@ void RefillUpgradeAmmoInSlot(int client, int slot, int amount)
     }
 
     int upgrades = GetEntProp(weapon, Prop_Send, "m_upgradeBitVec");
+    if (IsTrackedWeapon(g_hLimitedWeapons, weapon))
+    {
+        return;
+    }
+
     if (!(upgrades & (UPGRADE_INCENDIARY | UPGRADE_EXPLOSIVE)))
     {
         return;
     }
 
+    TrackWeapon(g_hInfiniteWeapons, weapon);
     if (GetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded") != amount)
     {
         SetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", amount);
+    }
+}
+
+public any Native_MarkLimited(Handle plugin, int numParams)
+{
+    int weapon = GetNativeCell(1);
+    if (weapon <= MaxClients || !IsValidEntity(weapon))
+    {
+        return false;
+    }
+
+    RemoveTrackedWeapon(g_hInfiniteWeapons, weapon);
+    TrackWeapon(g_hLimitedWeapons, weapon);
+    return true;
+}
+
+void TrackWeapon(ArrayList list, int weapon)
+{
+    PruneWeaponList(list);
+    int ref = EntIndexToEntRef(weapon);
+    if (list.FindValue(ref) == -1)
+    {
+        list.Push(ref);
+    }
+}
+
+bool IsTrackedWeapon(ArrayList list, int weapon)
+{
+    PruneWeaponList(list);
+    return list.FindValue(EntIndexToEntRef(weapon)) != -1;
+}
+
+void RemoveTrackedWeapon(ArrayList list, int weapon)
+{
+    int ref = EntIndexToEntRef(weapon);
+    int index = list.FindValue(ref);
+    if (index != -1)
+    {
+        list.Erase(index);
+    }
+}
+
+void PruneWeaponList(ArrayList list)
+{
+    for (int i = list.Length - 1; i >= 0; i--)
+    {
+        if (EntRefToEntIndex(list.Get(i)) == INVALID_ENT_REFERENCE)
+        {
+            list.Erase(i);
+        }
     }
 }
 
