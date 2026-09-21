@@ -1,534 +1,402 @@
-# L4D2 高难非 RPG 战役 PvE 服务器
+# L4D2 无限火力战役 PvPvE 服务器
 
-这是一个面向中国玩家的 Left 4 Dead 2 Dedicated Server 部署目录。玩法目标是：无限火力、无限弹匣不换弹、多人 Survivor、多人特感、疯狂尸潮、技能 Tank、击杀回血、Second Wind、Tank 掉宝、战役内 `!buy` 商城和完全无友伤。
+这是一个非 RPG 的 Left 4 Dead 2 Campaign PvPvE 服务器方案。
 
-**明确不做：** RPG、等级、经验、永久属性、转生、职业、Gun XP、PerkMod、Melee Fatigue、反伤型反友伤系统。
+- 幸存者阵营：无限火力、双主武器、二段跳、战役商城、回血、Second Wind、Boss 掉落。
+- 感染者阵营：真人特感、自由选择普通 SI、感染者商城、Tank 抽签、Mutant Tank 技能。
+- AI 系统：尸潮、AI 特感、动态数量、地图 Tank、Finale 修复。
+- 不包含：等级、经验、永久属性、转生、职业成长和永久 RPG 数据。
 
-文档状态：2026-09-20（America/New_York）
+## 固定目录
 
-## 当前状态
+| 用途 | 路径 |
+|---|---|
+| 项目源码 | `/home/wwwroot/l4d2` |
+| 实际服务器 | `/opt/l4d2` |
+| 游戏目录 | `/opt/l4d2/server/left4dead2` |
+| SteamCMD | `/opt/l4d2/steamcmd` |
+| 启动脚本 | `/opt/l4d2/scripts/start_server.sh` |
+| 中文运维脚本 | `/opt/l4d2/scripts/l4d2ctl.sh` |
+| 网页运维程序 | `/opt/l4d2/scripts/l4d2_web_admin.py` |
+| 游戏服务 | `l4d2.service` |
+| 网页服务 | `l4d2-web-admin.service` |
 
-- 系统：Debian GNU/Linux 13，x86_64 主机，32 位 L4D2 Server。
-- 项目源码目录：`/home/wwwroot/l4d2`。
-- 服务器运行目录：`/opt/l4d2/server`。
-- 游戏运行目录：`/opt/l4d2/server/left4dead2`。
-- 启动脚本：`/opt/l4d2/scripts/start_server.sh`。
-- 当前公开目标：最多 16 名真人混合阵营；典型配置为 12 名 Survivor + 最多 4 名真人 Infected。引擎和 MultiSlots 配置保留到 31 槽。
-- 最新生产启动探针：64 个 SourceMod 插件、12 个扩展加载成功，没有 `Failed` 或 `Bad Load`。
-- 尚未完成真实 Steam 客户端的 1/4/8/12 人功能测试；`!admin` 菜单、SteamID 认证、战斗行为和 Tank 平衡仍需要实际进服验证。
-- 已加入并加载 Command Buffer Fixer 2.11；本次生产重启没有再出现 `Cbuf_AddText: buffer overflow`。
+不要把实际密码、GSLT 或其他私密凭据写入本文件。
 
-详细部署清单、测试证据和回滚资料：
+## 玩家连接
 
-- [`docs/PLUGIN_MANIFEST.md`](docs/PLUGIN_MANIFEST.md)
-- [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md)
-- [`docs/CONFIG_NOTES.md`](docs/CONFIG_NOTES.md)
-- [`docs/ROLLBACK.md`](docs/ROLLBACK.md)
-- [`docs/MANUAL_DOWNLOADS.md`](docs/MANUAL_DOWNLOADS.md)
-- [`install_manifest.md`](install_manifest.md)
-
-## 目录结构
+在 L4D2 客户端启用开发者控制台，然后输入：
 
 ```text
-/home/wwwroot/l4d2/
-├── README.md
-├── docs/                         # 部署、配置、测试、回滚文档
-├── scripts/start_server.sh       # 启动入口
-├── server/                       # 实际 Dedicated Server
-│   └── left4dead2/
-│       ├── addons/metamod/
-│       ├── addons/sourcemod/
-│       │   ├── configs/
-│       │   ├── plugins/
-│       │   └── scripting/
-│       └── cfg/
-├── sources/                      # 第三方源码和解压源文件
-├── incoming/                     # 手动下载文件暂存目录
-├── backups/                      # 安装前和分阶段备份
-├── archives/                     # 小型归档
-└── logs/                         # 本地部署日志
+connect <服务器公网IP>:27015
 ```
 
-Git 不提交完整游戏运行时、VPK、地图素材、Steam 缓存、日志、备份和归档；这些文件仍保留在服务器目录中。源码、SourceMod 配置、自制插件、文档和启动脚本会纳入版本控制。
+默认游戏端口是 UDP `27015`。
 
-## 快速启动
+## 玩家常用指令
 
-生产运行建议使用 `l4d2srv` 用户，不要用 root 启动：
+| 功能 | 指令 |
+|---|---|
+| 打开中文开始菜单 | `!菜单`、`!pvehelp` |
+| 打开战役商城 | `!buy`、`!shop` |
+| 查看当前战役积分 | `!points`、`!money` |
+| 加入真人感染者 | `!infected`、`!特感` |
+| 返回幸存者阵营 | `!survivor`、`!人类` |
+| 选择普通特感 | `!zclass`、`!特感选择` |
+| 加入 Tank 抽签 | `!tankqueue` |
+| 退出 Tank 抽签 | `!notank` |
+| 打开管理员菜单 | `!admin` |
+| 查看帮助页 | 按 `H` |
+
+普通特感菜单包含 Smoker、Boomer、Hunter、Spitter、Jockey 和 Charger。Tank 与 Witch 不在普通职业菜单中。
+
+## 管理员使用
+
+当前管理员身份应保存在：
+
+```text
+/opt/l4d2/server/left4dead2/addons/sourcemod/configs/admins_simple.ini
+```
+
+添加管理员：
 
 ```bash
-cd /opt/l4d2
-runuser -u l4d2srv -- env \
-  PORT=27015 \
-  MAP=c1m1_hotel \
-  TICKRATE=30 \
-  /opt/l4d2/scripts/start_server.sh
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-admin 'STEAM_0:1:126011599' z
 ```
 
-脚本会进入 `server/`，执行 `srcds_run`，并固定传入：
-
-- `sv_setmax 31`
-- `-maxplayers 31`
-- 指定地图和 tickrate
-
-公开人数仍由 `/opt/l4d2/server/left4dead2/cfg/server.cfg` 和 MultiSlots 配置控制。启动前先把 `server.cfg` 中的：
-
-```cfg
-rcon_password "CHANGE_ME_BEFORE_PUBLIC_USE"
-```
-
-替换成真实的强密码。不要把真实 RCON 密码提交到 Git。
-
-停止服务器时，在服务器控制台输入：
-
-```text
-quit
-```
-
-也可以使用现有 RCON 工具发送 `quit`。不要直接删除进程作为常规停止方式。
-
-## 玩家常用功能
-
-玩家进入 Survivor 队伍后可以使用：
-
-| 操作 | 用法 |
-|---|---|
-| 战役商城 | `!buy` 或 `!shop` |
-| 查看战役积分 | `!points` 或 `!money` |
-| 部署 Tank 掉落的加特林 | `!minigun` |
-| AFK / 回到 Survivor | `!away`、`!join`，具体别名以已安装 AFK 插件为准 |
-| 投票踢人 | `!vk`，由 Votekick 插件提供 |
-| 特殊弹切换 | `Shift + Reload` |
-
-玩家也可以在 Campaign 中自愿加入真人感染者阵营：
-
-| 操作 | 用法 |
-|---|---|
-| 加入感染者 | `!infected` 或 `!inf` |
-| 回到 Survivor | `!survivor` |
-| 选择普通特感 | `!zclass` |
-| 加入 / 退出 Tank 抽签 | `!tankqueue` / `!notank` |
-
-这是 Campaign PvPvE，不是 Versus：没有换边计分、半场换边或竞技比分。感染者积分仍然复用 Campaign Shop，跨章节保留，换 Campaign 或 `mission_lost` 清零；没有永久等级、经验、属性或转生。
-
-商城积分是**当前战役货币**：保存在内存中，跨章节保留；进入新 Campaign 或触发 `mission_lost` 时清零，不写永久成长数据库。
-
-## SourceMod 管理员配置
-
-管理员系统使用 SourceMod 原生 SteamID 认证，不使用昵称，也不需要额外管理员账号插件。
-
-### 添加服主 Root
-
-1. 进自己的 L4D2，在游戏控制台输入：
-
-   ```text
-   status
-   ```
-
-2. 找到自己的 Steam2 ID，例如：
-
-   ```text
-   STEAM_1:0:123456789
-   ```
-
-3. 编辑：
-
-   ```text
-   server/left4dead2/addons/sourcemod/configs/admins_simple.ini
-   ```
-
-4. 添加一行：
-
-   ```text
-   "STEAM_1:0:123456789"    "99:z"
-   ```
-
-   把示例 ID 换成 `status` 显示的真实 ID。`99` 是免疫等级，`z` 是 Root 全权限。
-
-5. 在服务器控制台执行：
-
-   ```text
-   sm_reloadadmins
-   ```
-
-6. 重新进服后验证：
-
-   ```text
-   !admin
-   sm_who
-   ```
-
-不要把真实 SteamID 当作密码，也不要把 RCON 密码写进 `admins_simple.ini`。本仓库不会替你猜 SteamID，也没有提交真实服主账号。
-
-### 普通管理员
-
-不要把所有协管员都授予 `z`。可以按 SourceMod flags 分配踢人、Ban、换图、语音等最小权限。积分修改命令要求 Root 或 `custom6` 权限；完整权限模型由 SourceMod 的 `admin_levels.cfg` 和 `admins_simple.ini` 控制。
-
-## L4D2 PvE 管理插件
-
-自制插件源码和编译结果：
-
-- 源码：[`server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp)
-- 插件：`server/left4dead2/addons/sourcemod/plugins/l4d2_pve_admin.smx`
-- 审计日志：`server/left4dead2/addons/sourcemod/logs/pve_admin.log`
-- 版本：`1.0.0`
-
-插件只使用 SourceMod 管理权限；不会创建第二套管理员数据库。它把功能加入原生 `!admin` 菜单，并提供命令行入口。
-
-## 自制插件特别说明
-
-以下插件是本服务器自行维护的 SourcePawn 模块，不是从插件网站直接下载的不可审计二进制。每个模块同时保留 `.sp` 源码和编译后的 `.smx`，源码位于：
-
-```text
-server/left4dead2/addons/sourcemod/scripting/
-server/left4dead2/addons/sourcemod/scripting/third_party/
-```
-
-### 自制模块清单
-
-| 插件 | 负责内容 | 特别说明 |
-|---|---|---|
-| `l4d2_campaign_shop` | `!buy` 战役商城、战役内积分 | 积分只保存在当前战役内存中，不提供永久成长；对外提供积分 API。 |
-| `l4d2_combat_rewards` | 击杀回血、Second Wind、Tank 掉宝、加特林部署 | 统一处理战斗奖励，不要再叠加其他回血、Second Wind 或 Tank Loot 插件。 |
-| `l4d2_pve_admin` | `!admin` PvE 管理菜单、给装备、积分管理、测试生成、审计日志 | 依赖 SourceMod `adminmenu.smx`、Left4DHooks 和 `l4d2_campaign_shop` 的 native。 |
-| `l4d2_double_jump` | 一次额外空中跳跃 | 只允许二段跳，不是 BunnyHop 或无限跳。 |
-| `l4d2_end_safearea_teleport` | 最终安全区域 60 秒强制收尾 | 传送仍存活但未进安全屋的玩家，不主动处死玩家。 |
-| `l4d2_clear_thirdstrike` | 药丸 / 肾上腺素减少倒地次数 | 最低保留一次倒地机会，不能无限洗白黑白状态。 |
-| `l4d2_switch_upgrade_ammo` | Shift + Reload 切换特殊弹药 | 是本服维护版本；不要和 Multiple Equipments 或 Improved Multiple Equipment 同时安装。 |
-| `l4d2_pve_infected_core` | 阵营切换、普通 SI 职业、感染者商城、Tank 抽签、感染者奖励和 HUD | 依赖 InfectedBots 3.0.8、Left4DHooks 和 Campaign Shop。Playable Witch 保持独立关闭。 |
-
-### 依赖和加载顺序
-
-自制插件按以下关系运行：
-
-```text
-SourceMod + MetaMod
-        ↓
-Left4DHooks
-        ↓
-l4d2_campaign_shop
-        ↓
-l4d2_combat_rewards / 其他战斗模块
-        ↓
-l4d2_pve_admin
-```
-
-实际加载时 SourceMod 会按插件文件加载，但排查问题时必须按这个依赖关系检查。特别是：
-
-- `l4d2_pve_admin.smx` 不是独立插件。没有 `l4d2_campaign_shop.smx` 时，给装备、玩家管理和测试生成仍可用，但积分 API 菜单和积分命令会明确提示不可用。
-- `l4d2_pve_admin.smx` 需要 `adminmenu.smx` 才能把 `L4D2 PvE 管理` 注册到 `!admin`；基础命令仍可以通过控制台执行。
-- `l4d2_combat_rewards.smx`、`l4d2_end_safearea_teleport.smx` 等插件依赖 Left4DHooks 的事件、实体或生成接口。不要在服务器运行时卸载 Left4DHooks。
-- 如果某个自制插件显示 `Failed` 或 `Bad Load`，先检查依赖和错误日志，不要用另一个插件重复实现同一功能。
-
-### 自制插件和第三方插件的边界
-
-自制插件只负责本服没有合适稳定实现的功能，以及把多个功能收敛到一个清晰的所有权边界。第三方插件仍负责多人修复、特感数量、普通感染者数量、Tank 技能、反友伤和公共服投票等基础能力。
-
-同一系统只能有一个控制者：
-
-| 系统 | 控制者 |
-|---|---|
-| 商城积分 | `l4d2_campaign_shop` |
-| 击杀回血 / Second Wind / Tank Loot | `l4d2_combat_rewards` |
-| 管理员认证 | SourceMod 原生 Admin API |
-| 管理员菜单和本服测试功能 | `l4d2_pve_admin` |
-| SI 数量 | InfectedBots |
-| 普通感染者数量 | Dynamic Infected Balancer |
-| Tank HP / Tank 技能 | Mutant Tanks |
-| Coop 真人感染者基础 | InfectedBots 3.0.8 |
-| PvPvE 阵营切换 / Tank 抽签 / 感染者商城 | `l4d2_pve_infected_core` |
-| 友伤 | No Friendly-Fire |
-
-禁止再安装会直接修改上述同一系统的替代插件，否则可能出现积分重复、回血叠加、Tank 属性覆盖或菜单行为不一致。
-
-### 特别的更新规则
-
-1. 修改 `.sp` 后，必须使用服务器当前的 SourceMod 1.12 `spcomp` 重新编译对应 `.smx`。
-2. 修改 `l4d2_campaign_shop.inc` 的 native 声明或实现时，必须同时重新编译 `l4d2_campaign_shop.sp` 和 `l4d2_pve_admin.sp`。
-3. 不要只替换 `.smx` 而不保存对应源码，也不要只提交源码而忘记更新实际服务器使用的 `.smx`。
-4. 更新前先备份 `addons/sourcemod/plugins/`、自制源码和相关 `cfg`；生产服务器优先停服后替换并重启。
-5. 更新后依次检查：
-
-   ```text
-   sm exts list
-   sm plugins list
-   sm_who
-   !admin
-   sm_pveinfo
-   ```
-
-6. 如果出现 `native is not bound`、`Plugin failed to compile`、`Bad Load` 或积分 API 不可用，立即恢复上一版成对的 `.smx`，不要让新旧 Shop/Admin 二进制混用。
-
-### 自制插件的回滚重点
-
-- 管理插件异常：先把 `l4d2_pve_admin.smx` 移到 `plugins/disabled/`，不影响基础战斗插件。
-- 商城 API 异常：必须同时回滚 `l4d2_campaign_shop.smx` 和 `l4d2_pve_admin.smx`，因为管理员插件依赖商城 native。
-- 战斗奖励异常：只回滚 `l4d2_combat_rewards.smx`，不要同时删除 Mutant Tanks 或 InfectedBots。
-- 修改源码后重新编译失败时，不要覆盖正在运行的 `.smx`；先修复编译错误或恢复上一个可用二进制。
-
-### 游戏内菜单
-
-服主或有相应权限的管理员输入：
+游戏中验证：
 
 ```text
 !admin
+sm_who
 ```
 
-在 `L4D2 PvE 管理` 下可以看到：
-
-- **玩家管理**：治疗、复活、处死、踢出、Ban 60 分钟。
-- **装备管理**：给 Survivor 武器、医疗、投掷物。
-- **积分管理**：查看、增加 10/50/100、清空战役积分。需要 Root 或 `custom6`。
-- **感染者 / Boss 测试**：生成 Smoker、Boomer、Hunter、Spitter、Jockey、Charger、Tank、Witch；触发尸潮；清除普通特感或 Tank。
-- **服务器维护 / 信息**：查看地图和感染者计数、重载商城、重载管理员缓存。
-
-生成特感、Tank 和 Witch 使用 Left4DHooks 的生成 API，不通过打开 `sv_cheats 1` 来实现。生成位置优先使用玩家附近的有效特感出生点，仅用于管理员测试。
-
-### 命令行入口
-
-```text
-sm_pveadmin
-sm_pvegive <target> <item>
-sm_pveheal <target>
-sm_pverevive <target>
-
-sm_pvepoints [target]
-sm_pveaddpoints <target> <amount>
-sm_pvesetpoints <target> <amount>
-
-sm_pvespawn <smoker|boomer|hunter|spitter|jockey|charger|tank|witch>
-sm_pvehorde
-sm_pveinfo
-sm_pvereloadshop
-```
-
-`<target>` 支持 SourceMod 目标格式，例如 `@me`、`@all`、`#userid` 或玩家名。装备命令只接受白名单物品，常用别名包括：
-
-```text
-ak47, rifle, rifle_scar, rifle_sg552
-smg, smg_mp5, autoshotgun, shotgun_spas
-hunting_rifle, sniper_military, sniper_awp, sniper_scout
-m60, grenade_launcher, pistol, pistol_magnum
-fireaxe, katana, first_aid_kit, defibrillator
-pain_pills, adrenaline, molotov, pipe_bomb
-```
-
-示例：
-
-```text
-sm_pvegive @me rifle_m60
-sm_pvegive Sumo first_aid_kit
-sm_pveaddpoints Sumo 50
-sm_pvesetpoints Sumo 0
-sm_pvespawn tank
-```
-
-每次给装备、修改积分、生成 Boss、清除感染者、踢人、Ban、重载配置都会写入 `pve_admin.log`，包含管理员和目标的 Steam2 ID、操作和参数。日志不会写 RCON 密码。
-
-## 商城积分 API
-
-原来的 `l4d2_campaign_shop.sp` 已补充三个 SourceMod native，管理员插件通过 API 调用，不直接访问商店内部数组：
-
-```text
-L4D2CampaignShop_GetPoints(client)
-L4D2CampaignShop_AddPoints(client, amount)
-L4D2CampaignShop_SetPoints(client, points)
-```
-
-声明文件：
-
-```text
-server/left4dead2/addons/sourcemod/scripting/include/l4d2_campaign_shop.inc
-```
-
-如果 `l4d2_campaign_shop.smx` 没有加载，管理员插件会显示 API 不可用，而不会自己创建 SQLite 或另一套积分数据。
-
-## 重新编译自制插件
-
-使用服务器自带 SourceMod 1.12 编译器：
+查看服务器状态和在线玩家：
 
 ```bash
-cd /home/wwwroot/l4d2/server/left4dead2/addons/sourcemod/scripting
-
-./spcomp l4d2_campaign_shop.sp \
-  -iinclude \
-  -o../plugins/l4d2_campaign_shop.smx
-
-./spcomp l4d2_pve_admin.sp \
-  -iinclude \
-  -o../plugins/l4d2_pve_admin.smx
+sudo /opt/l4d2/scripts/l4d2ctl.sh status
 ```
 
-成功后可以在服务器控制台加载或重载：
+踢出指定 UserID：
+
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh kick 12
+```
+
+增加战役积分：
+
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh add-points 12 1000
+```
+
+积分是当前 Campaign 范围的数据，不是永久 RPG 数据。
+
+## 中文运维脚本
+
+直接打开交互菜单：
+
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh
+```
+
+菜单支持：
+
+- 启动、停止、重启和更新服务。
+- 查看服务状态、健康状态和在线玩家。
+- 设置大厅名称、人数、难度、SI 数量、SI 波次间隔和普通感染者数量。
+- 踢出玩家、增加积分和添加管理员。
+- 修改 MOTD、H 菜单帮助、进房公告。
+- 修改网页面板账户、密码、监听地址和端口。
+
+常用非交互命令：
+
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh start
+sudo /opt/l4d2/scripts/l4d2ctl.sh stop
+sudo /opt/l4d2/scripts/l4d2ctl.sh restart
+sudo /opt/l4d2/scripts/l4d2ctl.sh status
+sudo /opt/l4d2/scripts/l4d2ctl.sh health
+sudo /opt/l4d2/scripts/l4d2ctl.sh update
+```
+
+设置大厅和战斗参数：
+
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-name '无限火力战役 PvPvE'
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-slots 16
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-difficulty Hard
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-si-count 12
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-si-interval 25
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-common-limit 60
+```
+
+## systemd 运维
+
+```bash
+sudo systemctl start l4d2
+sudo systemctl stop l4d2
+sudo systemctl restart l4d2
+sudo systemctl status l4d2 --no-pager -l
+sudo journalctl -u l4d2 -n 200 --no-pager
+```
+
+网页面板：
+
+```bash
+sudo systemctl restart l4d2-web-admin
+sudo systemctl status l4d2-web-admin --no-pager -l
+```
+
+## 网页运维面板
+
+网页面板默认只监听：
 
 ```text
-sm plugins reload l4d2_campaign_shop
-sm plugins load l4d2_pve_admin
-sm plugins list
+127.0.0.1:27815
 ```
 
-如果修改了 `l4d2_campaign_shop.inc` 的 native 声明，必须重新编译商店和管理员插件。生产环境建议重启服务器，而不是在战役中重载会清空状态的插件。
+从管理电脑建立 SSH 隧道：
 
-## 关键配置
-
-### 当前 12 人档
-
-- `server/left4dead2/cfg/server.cfg`
-  - `sv_visiblemaxplayers 12`
-  - `sv_maxplayers 12`
-  - `sv_setmax 31`
-  - `sv_force_unreserved 1`
-  - `z_difficulty Hard`
-  - `sm_cvar sv_infinite_ammo 1`
-- `server/left4dead2/cfg/sourcemod/l4dmultislots.cfg`
-  - `l4d_multislots_max_survivors "12"`
-- `server/left4dead2/cfg/pve_core.cfg`
-- `server/left4dead2/cfg/pve_balance.cfg`
-- `server/left4dead2/cfg/sourcemod/l4d2_campaign_shop.cfg`
-
-### 改成 16 人
-
-先停止服务器，再同时修改：
-
-```cfg
-// server/left4dead2/cfg/server.cfg
-sv_visiblemaxplayers 16
-sv_maxplayers 16
-sv_setmax 31
-
-// server/left4dead2/cfg/sourcemod/l4dmultislots.cfg
-l4d_multislots_max_survivors "16"
+```bash
+ssh -N -L 27815:127.0.0.1:27815 root@<服务器公网IP>
 ```
 
-启动脚本继续使用 `-maxplayers 31`。改成 16 人后必须重新测试实体数量、网络 choke、普通感染者上限、SI 数量、Tank HP、Finale 救援和换图流程，不建议只改一个数字就公开运行。
-
-### 单一系统所有权
-
-| 系统 | 唯一控制者 |
-|---|---|
-| SI 数量和刷新 | InfectedBots |
-| SI AI | AI_HardSI |
-| 普通感染者数量 | Dynamic Infected Balancer |
-| Tank HP 和技能 | Mutant Tanks |
-| 友伤 | No Friendly-Fire |
-| 商城和战役积分 | L4D2 Campaign Shop |
-| 击杀回血、Second Wind、Tank 掉宝 | L4D2 Combat Rewards |
-| 管理权限和菜单 | SourceMod + L4D2 PvE Admin |
-
-不要再安装第二个会修改同一批 Director ConVar、Tank HP、SI 数量或积分数据库的插件。
-
-## 检查和故障排查
-
-服务器控制台常用检查：
+然后浏览器访问：
 
 ```text
-meta version
+http://127.0.0.1:27815/
+```
+
+网页账户、密码和端口保存在：
+
+```text
+/etc/l4d2/l4d2-admin.env
+```
+
+文件权限应为 `0600`。不要直接把内置 HTTP 面板暴露到公网；如确需公网访问，应使用防火墙白名单和 HTTPS 反向代理。
+
+网页支持：
+
+- 启动、停止、重启和更新。
+- 设置大厅名称、人数、难度、SI 数量、波次间隔和普通感染者数量。
+- 查看在线玩家、踢人、增加积分、添加管理员。
+- 修改 MOTD、H 菜单内容和进房公告。
+- 修改网页账户、密码、监听地址和端口。
+
+## 私密配置
+
+RCON 配置：
+
+```text
+/opt/l4d2/server/left4dead2/cfg/server_private.cfg
+```
+
+网页和 RCON 环境配置：
+
+```text
+/etc/l4d2/l4d2-admin.env
+```
+
+游戏启动环境：
+
+```text
+/etc/l4d2/l4d2.env
+```
+
+建议权限：
+
+```bash
+sudo chmod 600 /etc/l4d2/l4d2.env
+sudo chmod 600 /etc/l4d2/l4d2-admin.env
+sudo chmod 600 /opt/l4d2/server/left4dead2/cfg/server_private.cfg
+```
+
+## 当前插件健康状态
+
+当前生产检查结果：
+
+- MetaMod:Source `1.12.0-git1226`。
+- SourceMod `1.12.0-git7253`。
+- Left4DHooks `1.168`。
+- Actions `3.9.2`。
+- SourceMod 插件 64 个。
+- SourceMod 扩展 12 个。
+- Command Buffer Fixer `2.11` 已加载。
+- 当前没有 `Failed`、`Bad Load`、missing native 或 missing gamedata。
+
+MetaMod 在 32 位 L4D2 启动时可能先尝试 `linux64/server.so` 并打印架构提示，随后会加载正确的 32 位模块。只要 `meta list`、`sm plugins list` 和 `sm exts list` 正常，这条提示本身不代表服务器启动失败。
+
+## 日常健康检查
+
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh health
+sudo systemctl status l4d2 --no-pager -l
+sudo systemctl status l4d2-web-admin --no-pager -l
+sudo ss -lunp | grep 27015
+sudo journalctl -u l4d2 -n 200 --no-pager
+```
+
+SourceMod 错误日志：
+
+```bash
+sudo find /opt/l4d2/server/left4dead2/addons/sourcemod/logs \
+  -type f -name 'errors_*.log' -printf '%T@ %p\n' \
+  | sort -nr | head
+```
+
+游戏控制台检查：
+
+```text
 meta list
 sm version
 sm exts list
 sm plugins list
-sm_who
 ```
 
-重点检查：
+目标：
 
-- `sm plugins list` 中没有 `Failed` 或 `Bad Load`。
-- `sm exts list` 中 Left4DHooks、DHooks、SDKHooks、TopMenus 正常加载。
-- `server/left4dead2/addons/sourcemod/logs/errors_*.log` 没有新的加载错误。
-- `server/left4dead2/addons/sourcemod/logs/pve_admin.log` 能记录管理员操作。
-- `sm_reloadadmins` 后 `sm_who` 能看到自己的 Root 权限。
-- `!admin` 能打开 SourceMod 原生菜单，且能看到 `L4D2 PvE 管理`。
+```text
+Failed = 0
+Bad Load = 0
+missing native = 0
+missing gamedata = 0
+```
 
-如果插件加载失败，先确认：
+# 全新 Debian 服务器从零部署
 
-1. `l4d2_campaign_shop.smx` 在 `plugins/` 根目录。
-2. `l4d2_pve_admin.smx` 在 `plugins/` 根目录。
-3. `left4dhooks.smx` 已加载。
-4. 自制插件是用同一套 SourceMod 1.12 `spcomp` 编译。
-5. `sm plugins list` 和错误日志的实际报错，而不是只看文件是否存在。
+## 前置条件
 
-## 回滚
+- Debian 13 amd64。
+- `/opt/l4d2` 已挂载到准备存放游戏数据的磁盘。
+- root 权限。
+- 至少放行 UDP `27015`。
+- 能访问 SteamCMD、AlliedModders 和项目发布地址。
 
-完整回滚步骤见 [`docs/ROLLBACK.md`](docs/ROLLBACK.md)。最小回滚方式：
+确认磁盘：
 
 ```bash
-mv server/left4dead2/addons/sourcemod/plugins/l4d2_pve_admin.smx \
-   server/left4dead2/addons/sourcemod/plugins/disabled/
+findmnt /opt/l4d2
+df -h /opt/l4d2
 ```
 
-如果回滚积分 API 版本，同时恢复旧的 `l4d2_campaign_shop.smx`，管理员插件也应一并移到 `plugins/disabled/`，因为它依赖新增的 native。
+## 下载部署包
 
-安装阶段备份位于 `backups/`，例如：
-
-- `backups/phase4_pre_20260920_014702.tar.gz`
-- `backups/phase7a_pre_20260920_020638.tar.gz`
-- `backups/compact_cfg_20260920_0300/`
-
-## Git 用法
-
-本目录是本地 Git 仓库，默认分支为 `main`。Git 主要管理源码、配置和文档，不替代服务器备份。
-
-查看状态和变更：
+以下方式不要求管理员手工管理项目版本历史，只下载当前主分支归档：
 
 ```bash
-cd /home/wwwroot/l4d2
-git status
-git diff
-git log --oneline --decorate -10
+sudo apt update
+sudo apt install -y curl ca-certificates tar gzip
+sudo install -d -m 0755 /opt/l4d2
+sudo curl -fL \
+  https://github.com/dovetaill/l4d2_server/archive/refs/heads/main.tar.gz \
+  -o /tmp/l4d2-server.tar.gz
+sudo tar -xzf /tmp/l4d2-server.tar.gz \
+  --strip-components=1 \
+  -C /opt/l4d2
+sudo chmod +x /opt/l4d2/scripts/*.sh
 ```
 
-如果 Git 因服务器目录属于 `l4d2srv` 而提示 `detected dubious ownership`，先确认路径确实是本项目，再执行一次：
+## 创建部署私密参数
+
+每台服务器建议使用不同的 RCON 和网页密码：
 
 ```bash
-git config --global --add safe.directory /home/wwwroot/l4d2
+sudo install -d -m 0700 /root/l4d2-bootstrap
+sudo nano /root/l4d2-bootstrap/deploy.env
 ```
 
-这只是在当前系统用户的 Git 配置中信任该工作目录，不会改变服务器文件所有者。
-
-提交自己的修改：
+内容示例：
 
 ```bash
-git add README.md docs/ server/left4dead2/addons/sourcemod/scripting \
-  server/left4dead2/addons/sourcemod/configs \
-  server/left4dead2/cfg scripts .gitignore
-
-git commit -m "Update L4D2 PvE admin system"
+RCON_PASSWORD='为本机设置强密码'
+WEB_USER='qi'
+WEB_PASSWORD='为本机设置网页强密码'
+WEB_BIND='127.0.0.1'
+WEB_PORT='27815'
+PORT='27015'
+MAP='c1m1_hotel'
+TICKRATE='30'
+GSLT=''
 ```
 
-查看某次提交：
+保护文件：
 
 ```bash
-git show --stat --oneline HEAD
-git show HEAD -- README.md
+sudo chmod 600 /root/l4d2-bootstrap/deploy.env
 ```
 
-添加远程仓库并推送。远程地址必须由你自己提供，当前仓库没有预设远程：
+## 一键安装
 
 ```bash
-git remote add origin <你的 Git 远程地址>
-git remote -v
-git push -u origin main
+sudo bash -c '
+  set -a
+  source /root/l4d2-bootstrap/deploy.env
+  set +a
+  exec /opt/l4d2/scripts/bootstrap_l4d2.sh
+'
 ```
 
-如果远程已经存在，使用 `git remote set-url origin <新的远程地址>`，不要重复执行 `git remote add origin`。
+脚本设计为重复执行时保留已有游戏目录和私密配置，不删除 SteamCMD、游戏本体、日志或数据库。
 
-建议发布一个部署基线标签：
+当前版本能够自动完成：
+
+- Debian i386 依赖。
+- `l4d2srv` 服务账户。
+- SteamCMD 与 AppID `222860`。
+- MetaMod 和 SourceMod。
+- 自制 SourcePawn 插件编译。
+- RCON 私密配置。
+- systemd 游戏服务和网页服务。
+
+> 重要：完整第三方 Runtime 的全新服务器自动恢复仍列在 `docs/NEXT_WINDOW_REMAINING_TASKS_PROMPT.md` 中。完成该任务前，新机器的一键安装只能视为基础安装，不能视为与当前生产服务器完全一致。
+
+## 首次部署后检查
 
 ```bash
-git tag -a l4d2-pve-2026-09-20 -m "L4D2 PvE admin baseline"
-git push origin l4d2-pve-2026-09-20
+sudo systemctl status l4d2 --no-pager -l
+sudo systemctl status l4d2-web-admin --no-pager -l
+sudo /opt/l4d2/scripts/l4d2ctl.sh health
+sudo ss -lunp | grep 27015
 ```
 
-不要提交：真实 RCON 密码、Steam 凭据、运行日志、备份包、完整游戏 VPK 和 Steam 缓存。`.gitignore` 已经做了第一层过滤，但提交前仍要检查 `git status`。
+添加管理员：
 
-## 下一步实测清单
+```bash
+sudo /opt/l4d2/scripts/l4d2ctl.sh set-admin 'STEAM_0:1:126011599' z
+```
 
-用真实 Steam 客户端依次验证：
+客户端连接：
 
-1. SteamID 管理员认证、`sm_who`、`!admin`。
-2. `!admin` 中玩家管理、给枪、积分修改和审计日志。
-3. `sm_pvespawn tank`、普通特感生成和尸潮。
-4. 1/4/8/12 人加入、接管 Bot、换图和断线重连。
-5. Dual Primaries、自动射击、二段跳、特殊弹切换。
-6. 倒地自救、Second Wind、Tank 掉宝和 `!minigun`。
-7. `c1m1_hotel`、`c1m4_atrium`、`c5m5_bridge`、`c8m5_rooftop`、`c12m5_cornfield`。
-8. 监听 CPU、tick、entity count、网络 choke、错误日志和 SourceMod profiler。
+```text
+connect <服务器公网IP>:27015
+```
+
+## 多台服务器批量部署原则
+
+- 所有机器统一使用 `/opt/l4d2`。
+- 所有机器使用同一个安装入口：`scripts/bootstrap_l4d2.sh`。
+- 每台机器使用独立的 `/root/l4d2-bootstrap/deploy.env`。
+- 每台机器使用独立的 RCON 密码；网页账户可以统一，但密码仍建议分开。
+- 不要把 `/etc/l4d2` 或 `server_private.cfg` 放进公开部署包。
+- 部署完成后必须检查插件列表和错误日志，不能只判断进程是否存在。
+
+## 防火墙
+
+使用 UFW 时：
+
+```bash
+sudo apt install -y ufw
+sudo ufw allow 27015/udp
+```
+
+RCON 不建议直接对全网开放。网页面板默认只监听本机，不需要开放 `27815`。
+
+## 剩余开发任务
+
+剩余任务的完整新窗口执行说明保存在：
+
+```text
+/home/wwwroot/l4d2/docs/NEXT_WINDOW_REMAINING_TASKS_PROMPT.md
+```
+
+完成其中任务后，应再次更新本 README 的一键部署能力说明和最终验证结果。
