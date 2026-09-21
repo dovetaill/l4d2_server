@@ -45,6 +45,7 @@ server/left4dead2/addons/sourcemod/plugins/*
 !server/left4dead2/addons/sourcemod/plugins/l4d2_pve_infected_core.smx
 !server/left4dead2/addons/sourcemod/plugins/l4d2_pve_damage_display.smx
 !server/left4dead2/addons/sourcemod/plugins/l4d2_switch_ammo.smx
+!server/left4dead2/addons/sourcemod/plugins/command_buffer.smx
 
 # Custom SourcePawn sources and the one reviewed third-party source.
 server/left4dead2/addons/sourcemod/scripting/*
@@ -65,6 +66,12 @@ server/left4dead2/addons/sourcemod/scripting/include/*
 
 server/left4dead2/addons/sourcemod/scripting/third_party/*
 !server/left4dead2/addons/sourcemod/scripting/third_party/l4d2_double_jump.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/command_buffer.sp
+
+# Reviewed upstream gamedata for the command buffer fixer.
+!server/left4dead2/addons/sourcemod/gamedata/
+server/left4dead2/addons/sourcemod/gamedata/*
+!server/left4dead2/addons/sourcemod/gamedata/command_buffer.games.txt
 
 # Server configuration maintained by this project.
 server/left4dead2/cfg/*

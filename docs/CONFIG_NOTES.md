@@ -36,6 +36,6 @@
 
 ## Startup Console Notes
 
-The L4D2 engine still prints repeated `Cbuf_AddText: buffer overflow` messages during the map's config burst. Runtime plugin loading remains clean; the final PvPvE probe loaded 61 plugins, including the infected core, without new plugin errors. Generated configs were compacted and full versions are in `backups/compact_cfg_20260920_0300/`; this message should be monitored during a longer production start.
+Command Buffer Fixer 2.11 is installed and loaded to defer commands that overflow the engine command buffer. The latest production restart loaded 64 plugins and 12 extensions without a new `Cbuf_AddText: buffer overflow` entry. Generated configs were compacted and full versions are in `backups/compact_cfg_20260920_0300/`.
 
 Normal engine noise also includes missing commentary point-template entities on `c1m1_hotel`, absent root Steam SDK lookup before the local Steam client is found, and VPK handles reported on clean quit.

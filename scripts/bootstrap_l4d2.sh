@@ -292,6 +292,7 @@ compile_plugins() {
         "l4d2_switch_upgrade_ammo.sp:l4d2_switch_ammo.smx"
         "third_party/l4d2_double_jump.sp:l4d2_double_jump.smx"
         "l4d2_pve_damage_display.sp:l4d2_pve_damage_display.smx"
+        "third_party/command_buffer.sp:command_buffer.smx"
     )
 
     [[ -x "${compiler}" ]] || die "SourcePawn compiler is missing: ${compiler}"

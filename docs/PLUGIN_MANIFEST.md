@@ -5,12 +5,13 @@ Generated: 2026-09-20 (America/New_York)
 ## Runtime
 
 - OS: Debian GNU/Linux 13 (trixie), x86_64 host, 32-bit L4D2 server
-- Server root: `/home/wwwroot/l4d2/server`
-- Game root: `/home/wwwroot/l4d2/server/left4dead2`
-- Launcher: `/home/wwwroot/l4d2/scripts/start_server.sh`
+- Source repository: `/home/wwwroot/l4d2`
+- Server root: `/opt/l4d2/server`
+- Game root: `/opt/l4d2/server/left4dead2`
+- Launcher: `/opt/l4d2/scripts/start_server.sh`
 - Target public capacity: 16 mixed players; typical profile is 12 Survivor + up to 4 human Infected
 - L4DToolZ engine capacity: 31 slots; architecture is ready for a future 16-survivor profile
-- Current launch probe: port 27022, map `c1m1_hotel`
+- Current launch probe: port 27015, map `c1m1_hotel`
 
 ## Base Components
 
@@ -33,6 +34,7 @@ Actions 4.0.1 was kept in `sources/third_party/` but rejected by SourceMod 1.12 
 - Predicaments 0.4; Codex Clear Thirdstrike 1.0.0; Codex Switch Upgrade Ammo 1.0.0; Codex Combat Rewards 1.0.0.
 - Codex Campaign Shop 1.0.0; Codex End Safearea Teleport 1.0.0; Votekick 5.3; AFK/Join commands 5.7; no-rushing 1.1h.
 - l4d2_assist 2.7; kills 1.8; clear_weapon_drop 3.4; SMAC 0.8.8.0 core, Aimbot, Commands, ConVars, Speedhack and L4D2 Fixes.
+- Command Buffer Fixer 2.11; reviewed upstream SourcePawn and gamedata are tracked with the project and loaded at startup.
 
 ## Source and Build Records
 
@@ -56,6 +58,7 @@ Actions 4.0.1 was kept in `sources/third_party/` but rejected by SourceMod 1.12 
 | `l4d2_clear_thirdstrike.sp` | `l4d2_clear_thirdstrike.smx` | pills/adrenaline reduce revive count to minimum 1 |
 | `l4d2_switch_upgrade_ammo.sp` | `l4d2_switch_ammo.smx` | Shift+Reload cycles regular/incendiary/explosive |
 | `l4d2_pve_infected_core.sp` | `l4d2_pve_infected_core.smx` | Campaign PvPvE team switching, human SI classes, infected economy, Tank lottery and HUD |
+| `l4d2_pve_damage_display.sp` | `l4d2_pve_damage_display.smx` | attacker-only damage hints and per-Tank top-five ranking |
 
 ## Deliberately Not Installed
 
@@ -63,10 +66,11 @@ RPGMaker, SkyRPG, PerkMod, Gun XP, ranks, levels, experience, prestige, attribut
 
 ## Operational Notes
 
-- `rcon_password` is still the placeholder `CHANGE_ME_BEFORE_PUBLIC_USE`; set it before public exposure.
+- `rcon_password` is stored only in `/opt/l4d2/server/left4dead2/cfg/server_private.cfg` and `/etc/l4d2/l4d2-admin.env`; the actual secret is excluded from Git.
 - The server was launched as root for probes only. Production should run as `l4d2srv`.
 - The Item Hint plugin still reports that Use Priority Patch is recommended. It was not fetched from a random mirror.
 - SourceMod's historical `errors_20260920.log` contains only pre-fix failures from `nextmap.smx`, missing Upgrade Pack gamedata, and Actions 4.0.1. The later successful probes added no new SourceMod error entries.
 - `l4dinfectedbots` reads the local `data/l4dinfectedbots/pve_pvpve.cfg` profile. Its own `coop_versus_tank_playable` remains disabled because Tank ownership is deliberately handled by the custom lottery; Mutant Tanks remains the Tank ability owner.
 - The five local Mutant Tanks profiles enable Human Support with bounded manual ability charges and cooldowns (two or three abilities per profile). This is configuration for the existing Mutant Tanks Human Support path, not a second Tank ability system.
 - Playable Witch is intentionally not enabled. The infected core leaves the Witch purchase entry disabled until a separate current SourceMod/Left4DHooks module exposes a validated control native.
+- The current restart loaded 64 plugins and 12 extensions with no `Failed` or `Bad Load` entries. Command Buffer Fixer 2.11 is active; no new `Cbuf_AddText: buffer overflow` was observed.

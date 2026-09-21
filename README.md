@@ -9,13 +9,14 @@
 ## 当前状态
 
 - 系统：Debian GNU/Linux 13，x86_64 主机，32 位 L4D2 Server。
-- 服务器目录：`/home/wwwroot/l4d2/server`。
-- 游戏目录：`/home/wwwroot/l4d2/server/left4dead2`。
-- 启动脚本：[`scripts/start_server.sh`](scripts/start_server.sh)。
+- 项目源码目录：`/home/wwwroot/l4d2`。
+- 服务器运行目录：`/opt/l4d2/server`。
+- 游戏运行目录：`/opt/l4d2/server/left4dead2`。
+- 启动脚本：`/opt/l4d2/scripts/start_server.sh`。
 - 当前公开目标：最多 16 名真人混合阵营；典型配置为 12 名 Survivor + 最多 4 名真人 Infected。引擎和 MultiSlots 配置保留到 31 槽。
-- 最新管理员插件启动探针：60 个 SourceMod 插件、12 个扩展加载成功，没有 `Failed` 或 `Bad Load`。
+- 最新生产启动探针：64 个 SourceMod 插件、12 个扩展加载成功，没有 `Failed` 或 `Bad Load`。
 - 尚未完成真实 Steam 客户端的 1/4/8/12 人功能测试；`!admin` 菜单、SteamID 认证、战斗行为和 Tank 平衡仍需要实际进服验证。
-- 已知启动噪声：部分地图会出现 `Cbuf_AddText: buffer overflow`，目前不等于插件加载失败，需在长期运行时继续观察。
+- 已加入并加载 Command Buffer Fixer 2.11；本次生产重启没有再出现 `Cbuf_AddText: buffer overflow`。
 
 详细部署清单、测试证据和回滚资料：
 
@@ -55,12 +56,12 @@ Git 不提交完整游戏运行时、VPK、地图素材、Steam 缓存、日志�
 生产运行建议使用 `l4d2srv` 用户，不要用 root 启动：
 
 ```bash
-cd /home/wwwroot/l4d2
+cd /opt/l4d2
 runuser -u l4d2srv -- env \
   PORT=27015 \
   MAP=c1m1_hotel \
   TICKRATE=30 \
-  /home/wwwroot/l4d2/scripts/start_server.sh
+  /opt/l4d2/scripts/start_server.sh
 ```
 
 脚本会进入 `server/`，执行 `srcds_run`，并固定传入：
@@ -69,7 +70,7 @@ runuser -u l4d2srv -- env \
 - `-maxplayers 31`
 - 指定地图和 tickrate
 
-公开人数仍由 [`server/left4dead2/cfg/server.cfg`](server/left4dead2/cfg/server.cfg) 和 MultiSlots 配置控制。启动前先把 `server.cfg` 中的：
+公开人数仍由 `/opt/l4d2/server/left4dead2/cfg/server.cfg` 和 MultiSlots 配置控制。启动前先把 `server.cfg` 中的：
 
 ```cfg
 rcon_password "CHANGE_ME_BEFORE_PUBLIC_USE"

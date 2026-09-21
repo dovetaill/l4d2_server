@@ -1282,39 +1282,41 @@ void RefreshMutantTankTypeNames()
 
     char path[PLATFORM_MAX_PATH];
     BuildPath(Path_SM, path, sizeof(path), "data/mutant_tanks/%s", configName);
-    KeyValues kv = new KeyValues("Mutant Tanks");
-    if (!kv.ImportFromFile(path))
+    File file = OpenFile(path, "r");
+    if (file == null)
     {
-        delete kv;
         return;
     }
 
-    int maxType = MT_MAXTYPES;
-    if (MutantTanksApiAvailable())
+    char line[256];
+    char parts[6][64];
+    int currentType = 0;
+    while (file.ReadLine(line, sizeof(line)))
     {
-        maxType = MT_GetMaxType();
-        if (maxType > MT_MAXTYPES)
+        TrimString(line);
+        if (StrContains(line, "\"Tank #", false) == 0)
         {
-            maxType = MT_MAXTYPES;
+            int hash = FindCharInString(line, '#');
+            currentType = (hash >= 0) ? StringToInt(line[hash + 1]) : 0;
+            if (currentType < 1 || currentType > MT_MAXTYPES)
+            {
+                currentType = 0;
+            }
+            continue;
         }
-    }
 
-    char section[32];
-    for (int type = 1; type <= maxType; type++)
-    {
-        Format(section, sizeof(section), "Tank #%d", type);
-        kv.Rewind();
-        if (!kv.JumpToKey(section, false))
+        if (currentType == 0)
         {
             continue;
         }
-        if (!kv.JumpToKey("General", false))
+
+        int count = ExplodeString(line, "\"", parts, sizeof(parts), sizeof(parts[]));
+        if (count >= 4 && StrEqual(parts[1], "Tank Name"))
         {
-            continue;
+            strcopy(g_sTankTypeNames[currentType], sizeof(g_sTankTypeNames[]), parts[3]);
         }
-        kv.GetString("Tank Name", g_sTankTypeNames[type], sizeof(g_sTankTypeNames[]), "");
     }
-    delete kv;
+    delete file;
 }
 
 void GetTankTypeName(int type, char[] buffer, int size)
