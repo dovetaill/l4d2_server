@@ -9,6 +9,8 @@
 #include <adminmenu>
 #include <l4d2_campaign_shop>
 #include <mutant_tanks>
+#include <l4d2_playable_witch>
+#include <l4d2_pve_mutant_tanks>
 
 #define PLUGIN_VERSION "1.1.0"
 #define TEAM_SURVIVOR 2
@@ -16,6 +18,7 @@
 #define ZOMBIE_WITCH 7
 #define ZOMBIE_TANK 8
 #define MAX_ADMIN_ITEMS 24
+#define ADMIN_TANK_TYPE_COUNT 146
 
 public Plugin myinfo =
 {
@@ -30,7 +33,8 @@ enum AdminMenuMode
 {
     MenuMode_Player = 1,
     MenuMode_Equipment,
-    MenuMode_Points
+    MenuMode_Points,
+    MenuMode_WitchTarget
 };
 
 enum TankAdminAction
@@ -131,6 +135,8 @@ public void OnPluginStart()
     RegAdminCmd("sm_pvehorde", Command_PveHorde, ADMFLAG_SLAY, "Force a director panic event.");
     RegAdminCmd("sm_pveinfo", Command_PveInfo, ADMFLAG_GENERIC, "Show PvE server counters.");
     RegAdminCmd("sm_pvereloadshop", Command_PveReloadShop, ADMFLAG_CONFIG, "Reload the campaign shop plugin.");
+    RegAdminCmd("sm_pvetank", Command_PveTank, ADMFLAG_SLAY, "sm_pvetank <target> <type>");
+    RegAdminCmd("sm_pvewitch", Command_PveWitch, ADMFLAG_SLAY, "sm_pvewitch <target>");
 
     g_cvAdminTankMenu = CreateConVar("l4d2_pve_admin_tank_menu", "1", "Show the administrator Tank type menu.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
     g_cvAdminWitchMenu = CreateConVar("l4d2_pve_admin_witch_menu", "1", "Show the administrator Witch management entry.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
@@ -454,6 +460,46 @@ public Action Command_PveSpawn(int client, int args)
     return Plugin_Handled;
 }
 
+public Action Command_PveTank(int client, int args)
+{
+    if (args < 2)
+    {
+        ReplyToCommand(client, "[PVE] Usage: sm_pvetank <target> <type>");
+        return Plugin_Handled;
+    }
+
+    int target = FindSingleTarget(client, 1);
+    if (!IsValidTarget(client, target))
+    {
+        return Plugin_Handled;
+    }
+    char typeArg[16];
+    GetCmdArg(2, typeArg, sizeof(typeArg));
+    int type = StringToInt(typeArg);
+    SpawnAdminTank(client, type, target);
+    return Plugin_Handled;
+}
+
+public Action Command_PveWitch(int client, int args)
+{
+    if (args < 1)
+    {
+        ReplyToCommand(client, "[PVE] Usage: sm_pvewitch <target>");
+        return Plugin_Handled;
+    }
+    int target = FindSingleTarget(client, 1);
+    if (!IsValidTarget(client, target))
+    {
+        return Plugin_Handled;
+    }
+    if (!RequestPlayableWitch(client, target))
+    {
+        ReplyToCommand(client, "[PVE] Playable Witch control failed for %N.", target);
+        return Plugin_Handled;
+    }
+    return Plugin_Handled;
+}
+
 public Action Command_PveHorde(int client, int args)
 {
     ServerCommand("director_force_panic");
@@ -492,6 +538,7 @@ void ShowTargetMenu(int client, AdminMenuMode mode)
         case MenuMode_Player: menu.SetTitle("玩家管理");
         case MenuMode_Equipment: menu.SetTitle("装备管理 - 选择玩家");
         case MenuMode_Points: menu.SetTitle("积分管理 - 选择玩家");
+        case MenuMode_WitchTarget: menu.SetTitle("Witch 控制 - 选择目标");
     }
     menu.ExitBackButton = true;
     AddTargetsToMenu2(menu, client, COMMAND_FILTER_CONNECTED);
@@ -528,6 +575,11 @@ public int MenuHandler_Target(Menu menu, MenuAction action, int client, int item
             case MenuMode_Player: ShowPlayerActionMenu(client);
             case MenuMode_Equipment: ShowEquipmentMenu(client);
             case MenuMode_Points: ShowPointsMenu(client);
+            case MenuMode_WitchTarget:
+            {
+                RequestPlayableWitch(client, target);
+                ShowWitchAdminMenu(client);
+            }
         }
     }
     return 0;
@@ -808,33 +860,31 @@ void ShowTankTypeMenu(int client)
     }
 
     RefreshMutantTankTypeNames();
-    int minType = MT_GetMinType();
-    int maxType = MT_GetMaxType();
-    if (minType < 1 || maxType < minType)
-    {
-        PrintToChat(client, "\x04[PVE]\x01 Mutant Tanks 没有可用的 Tank 类型范围。\x01");
-        ShowBossAdminMenu(client);
-        return;
-    }
 
     Menu menu = new Menu(MenuHandler_TankType);
     menu.SetTitle("Tank 类型管理 | 选择变体");
     char info[16], display[128], tankName[64];
-    for (int type = minType; type <= maxType && type <= MT_MAXTYPES; type++)
+    int configuredTypes;
+    for (int type = 1; type <= ADMIN_TANK_TYPE_COUNT; type++)
     {
+        if (!GetConfiguredTankTypeName(type, tankName, sizeof(tankName)))
+        {
+            continue;
+        }
+
         IntToString(type, info, sizeof(info));
-        GetTankTypeName(type, tankName, sizeof(tankName));
-        if (!MT_IsTypeEnabled(type, 0))
-        {
-            Format(display, sizeof(display), "%d. %s（当前配置禁用）", type, tankName);
-            menu.AddItem(info, display, ITEMDRAW_DISABLED);
-        }
-        else
-        {
-            Format(display, sizeof(display), "%d. %s", type, tankName);
-            menu.AddItem(info, display);
-        }
+        Format(display, sizeof(display), "%d. %s", type, tankName);
+        menu.AddItem(info, display);
+        configuredTypes++;
     }
+    if (configuredTypes == 0)
+    {
+        delete menu;
+        PrintToChat(client, "\x04[PVE]\x01 Mutant Tanks 没有可用的已配置 Tank 类型。\x01");
+        ShowBossAdminMenu(client);
+        return;
+    }
+
     menu.ExitBackButton = true;
     menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -874,13 +924,19 @@ void ShowTankActionMenu(int client, int type)
     }
 
     char tankName[64], title[128];
-    GetTankTypeName(type, tankName, sizeof(tankName));
+    if (!GetConfiguredTankTypeName(type, tankName, sizeof(tankName)))
+    {
+        PrintToChat(client, "\x04[PVE]\x01 Tank 类型 #%d 未配置。\x01", type);
+        ShowTankTypeMenu(client);
+        return;
+    }
     Format(title, sizeof(title), "Tank 类型 #%d：%s", type, tankName);
 
     Menu menu = new Menu(MenuHandler_TankAction);
     menu.SetTitle(title);
     menu.AddItem("spawn", "生成该类型 Tank（AI）");
     menu.AddItem("spawn_takeover", "生成并接管该类型 Tank");
+    menu.AddItem("spawn_target", "生成并接管指定目标");
     bool canTakeover = GetFeatureStatus(FeatureType_Native, "L4D_ReplaceTank") == FeatureStatus_Available;
     menu.AddItem("takeover", "接管现有 Tank，并应用该类型", canTakeover ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
     menu.AddItem("back_types", "返回 Tank 类型列表");
@@ -908,11 +964,16 @@ public int MenuHandler_TankAction(Menu menu, MenuAction action, int client, int 
         int type = g_iMenuTankType[client];
         if (StrEqual(info, "spawn"))
         {
-            SpawnAdminTank(client, type, false);
+            SpawnAdminTank(client, type, 0);
         }
         else if (StrEqual(info, "spawn_takeover"))
         {
-            SpawnAdminTank(client, type, true);
+            SpawnAdminTank(client, type, client);
+        }
+        else if (StrEqual(info, "spawn_target"))
+        {
+            ShowTankTargetMenu(client, type);
+            return 0;
         }
         else if (StrEqual(info, "takeover"))
         {
@@ -931,6 +992,50 @@ public int MenuHandler_TankAction(Menu menu, MenuAction action, int client, int 
     return 0;
 }
 
+void ShowTankTargetMenu(int client, int type)
+{
+    if (!IsValidClient(client) || !MutantTanksApiAvailable())
+    {
+        return;
+    }
+
+    g_iMenuTankType[client] = type;
+    Menu menu = new Menu(MenuHandler_TankTarget);
+    char title[128];
+    Format(title, sizeof(title), "Tank #%d: select takeover target", type);
+    menu.SetTitle(title);
+    AddTargetsToMenu2(menu, client, COMMAND_FILTER_CONNECTED);
+    menu.ExitBackButton = true;
+    menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int MenuHandler_TankTarget(Menu menu, MenuAction action, int client, int item)
+{
+    if (action == MenuAction_End)
+    {
+        delete menu;
+    }
+    else if (action == MenuAction_Cancel)
+    {
+        if (item == MenuCancel_ExitBack)
+        {
+            ShowTankActionMenu(client, g_iMenuTankType[client]);
+        }
+    }
+    else if (action == MenuAction_Select)
+    {
+        char info[32];
+        menu.GetItem(item, info, sizeof(info));
+        int target = GetClientOfUserId(StringToInt(info));
+        if (IsValidTarget(client, target))
+        {
+            SpawnAdminTank(client, g_iMenuTankType[client], target);
+        }
+        ShowTankActionMenu(client, g_iMenuTankType[client]);
+    }
+    return 0;
+}
+
 void ShowWitchAdminMenu(int client)
 {
     if (!IsValidClient(client))
@@ -940,11 +1045,14 @@ void ShowWitchAdminMenu(int client)
 
     bool canSpawn = GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitch") == FeatureStatus_Available;
     bool canSpawnBride = GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitchBride") == FeatureStatus_Available;
+    bool canControl = PlayableWitchApiAvailable();
     Menu menu = new Menu(MenuHandler_WitchAdmin);
     menu.SetTitle("Witch 管理（管理员专用）");
     menu.AddItem("spawn", "生成普通 Witch", canSpawn ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
     menu.AddItem("spawn_bride", "生成 Bride Witch", canSpawnBride ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
-    if (g_cvAdminWitchPlaceholder.BoolValue)
+    menu.AddItem("witch_self", "让自己成为 Witch", canControl ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+    menu.AddItem("witch_target", "让指定目标成为 Witch", canControl ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED);
+    if (g_cvAdminWitchPlaceholder.BoolValue && !canControl)
     {
         menu.AddItem("takeover_unavailable", "接管 Witch（需要 Playable Witch 控制模块）", ITEMDRAW_DISABLED);
     }
@@ -978,12 +1086,22 @@ public int MenuHandler_WitchAdmin(Menu menu, MenuAction action, int client, int 
         {
             SpawnWitchForAdmin(client, true);
         }
+        else if (StrEqual(info, "witch_self"))
+        {
+            RequestPlayableWitch(client, client);
+        }
+        else if (StrEqual(info, "witch_target"))
+        {
+            ShowTargetMenu(client, MenuMode_WitchTarget);
+            return 0;
+        }
         else if (StrEqual(info, "status"))
         {
             bool canSpawn = GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitch") == FeatureStatus_Available;
             bool canSpawnBride = GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitchBride") == FeatureStatus_Available;
-            PrintToChat(client, "\x04[PVE]\x01 Witch 生成：普通=%s，Bride=%s。当前依赖范围没有可调用的 Witch 接管 native；占位不会影响普通玩家。", canSpawn ? "可用" : "不可用", canSpawnBride ? "可用" : "不可用");
-            Audit(client, 0, "witch_status", "spawn=%d bride=%d takeover=0", canSpawn, canSpawnBride);
+            bool canControl = PlayableWitchApiAvailable();
+            PrintToChat(client, "\x04[PVE]\x01 Witch 生成：普通=%s，Bride=%s；Playable Witch=%s。", canSpawn ? "可用" : "不可用", canSpawnBride ? "可用" : "不可用", canControl ? "可用" : "不可用");
+            Audit(client, 0, "witch_status", "spawn=%d bride=%d playable=%d", canSpawn, canSpawnBride, canControl);
         }
         if (IsValidClient(client))
         {
@@ -1246,13 +1364,7 @@ void GiveItemToTarget(int admin, int target, int item)
 
 bool MutantTanksApiAvailable()
 {
-    if (!LibraryExists("mutant_tanks"))
-    {
-        return false;
-    }
-    return GetFeatureStatus(FeatureType_Native, "MT_GetMinType") == FeatureStatus_Available
-        && GetFeatureStatus(FeatureType_Native, "MT_GetMaxType") == FeatureStatus_Available
-        && GetFeatureStatus(FeatureType_Native, "MT_IsTypeEnabled") == FeatureStatus_Available
+    return LibraryExists("mutant_tanks")
         && GetFeatureStatus(FeatureType_Native, "MT_SetTankType") == FeatureStatus_Available;
 }
 
@@ -1296,8 +1408,10 @@ void RefreshMutantTankTypeNames()
         TrimString(line);
         if (StrContains(line, "\"Tank #", false) == 0)
         {
-            int hash = FindCharInString(line, '#');
-            currentType = (hash >= 0) ? StringToInt(line[hash + 1]) : 0;
+            char typeToken[32];
+            strcopy(typeToken, sizeof(typeToken), line);
+            ReplaceString(typeToken, sizeof(typeToken), "\"Tank #", "");
+            currentType = StringToInt(typeToken);
             if (currentType < 1 || currentType > MT_MAXTYPES)
             {
                 currentType = 0;
@@ -1319,28 +1433,40 @@ void RefreshMutantTankTypeNames()
     delete file;
 }
 
-void GetTankTypeName(int type, char[] buffer, int size)
+bool GetConfiguredTankTypeName(int type, char[] buffer, int size)
 {
-    if (type > 0 && type <= MT_MAXTYPES && g_sTankTypeNames[type][0] != '\0')
+    buffer[0] = '\0';
+    if (type < 1 || type > ADMIN_TANK_TYPE_COUNT)
+    {
+        return false;
+    }
+
+    if (GetFeatureStatus(FeatureType_Native, "L4D2PveMutantTanks_GetTypeName") == FeatureStatus_Available
+        && L4D2PveMutantTanks_GetTypeName(type, buffer, size)
+        && buffer[0] != '\0')
+    {
+        return true;
+    }
+
+    if (type <= MT_MAXTYPES && g_sTankTypeNames[type][0] != '\0')
     {
         strcopy(buffer, size, g_sTankTypeNames[type]);
-        return;
+        return true;
     }
-    Format(buffer, size, "Mutant Tank #%d", type);
+    return false;
 }
 
-bool SpawnAdminTank(int admin, int type, bool takeover)
+bool SpawnAdminTank(int admin, int type, int takeoverTarget)
 {
     if (!IsValidClient(admin) || !MutantTanksApiAvailable())
     {
         return false;
     }
 
-    int minType = MT_GetMinType();
-    int maxType = MT_GetMaxType();
-    if (type < minType || type > maxType || !MT_IsTypeEnabled(type, 0))
+    char tankName[64];
+    if (!GetConfiguredTankTypeName(type, tankName, sizeof(tankName)))
     {
-        PrintToChat(admin, "\x04[PVE]\x01 该 Tank 类型当前未启用，未执行操作。\x01");
+        PrintToChat(admin, "\x04[PVE]\x01 Tank 类型 #%d 未配置，未执行操作。\x01", type);
         return false;
     }
     if (GetFeatureStatus(FeatureType_Native, "L4D2_SpawnTank") != FeatureStatus_Available)
@@ -1351,11 +1477,17 @@ bool SpawnAdminTank(int admin, int type, bool takeover)
 
     float pos[3], ang[3];
     GetSpawnTransform(admin, ZOMBIE_TANK, pos, ang);
+    if (GetFeatureStatus(FeatureType_Native, "L4D2PveMutantTanks_MarkNextSpawn") == FeatureStatus_Available)
+    {
+        L4D2PveMutantTanks_MarkNextSpawn(PveMutantTankSource_Admin, type);
+    }
+    SetAdminTankSpawnBypass(true);
     int tank = L4D2_SpawnTank(pos, ang);
+    SetAdminTankSpawnBypass(false);
     if (tank <= 0)
     {
         PrintToChat(admin, "\x04[PVE]\x01 Tank 生成失败，可能被当前战役阶段或核心限制拦截。\x01");
-        Audit(admin, 0, "spawn_tank_failed", "type=%d takeover=%d", type, takeover);
+        Audit(admin, 0, "spawn_tank_failed", "type=%d target=%d", type, takeoverTarget);
         return false;
     }
 
@@ -1364,12 +1496,10 @@ bool SpawnAdminTank(int admin, int type, bool takeover)
     pack.WriteCell(GetClientUserId(admin));
     pack.WriteCell(tank);
     pack.WriteCell(type);
-    pack.WriteCell(takeover);
+    pack.WriteCell(IsValidClient(takeoverTarget) ? GetClientUserId(takeoverTarget) : 0);
 
-    char tankName[64];
-    GetTankTypeName(type, tankName, sizeof(tankName));
     PrintToChat(admin, "\x04[PVE]\x01 已请求生成 %s（类型 #%d）。", tankName, type);
-    Audit(admin, 0, "spawn_tank", "type=%d name=%s takeover=%d", type, tankName, takeover);
+    Audit(admin, 0, "spawn_tank", "type=%d name=%s target=%d", type, tankName, takeoverTarget);
     return true;
 }
 
@@ -1379,7 +1509,7 @@ public Action Timer_ApplyAdminTankType(Handle timer, DataPack pack)
     int admin = GetClientOfUserId(pack.ReadCell());
     int tankHint = pack.ReadCell();
     int type = pack.ReadCell();
-    bool takeover = pack.ReadCell() != 0;
+    int takeoverTarget = GetClientOfUserId(pack.ReadCell());
 
     int tank = IsLiveTank(tankHint) ? tankHint : FindLiveTank();
     if (!IsLiveTank(tank) || !MutantTanksApiAvailable())
@@ -1392,11 +1522,11 @@ public Action Timer_ApplyAdminTankType(Handle timer, DataPack pack)
     }
 
     MT_SetTankType(tank, type, true);
-    if (takeover)
+    if (IsValidClient(takeoverTarget))
     {
         DataPack takeoverPack;
         CreateDataTimer(0.15, Timer_TakeoverSpawnedTank, takeoverPack, TIMER_FLAG_NO_MAPCHANGE);
-        takeoverPack.WriteCell(GetClientUserId(admin));
+        takeoverPack.WriteCell(GetClientUserId(takeoverTarget));
         takeoverPack.WriteCell(tank);
         takeoverPack.WriteCell(type);
     }
@@ -1434,6 +1564,13 @@ void TakeOverAdminTank(int admin, int type)
 {
     if (!IsValidClient(admin) || !MutantTanksApiAvailable())
     {
+        return;
+    }
+
+    char tankName[64];
+    if (!GetConfiguredTankTypeName(type, tankName, sizeof(tankName)))
+    {
+        PrintToChat(admin, "\x04[PVE]\x01 Tank 类型 #%d 未配置，未执行接管。\x01", type);
         return;
     }
     if (GetFeatureStatus(FeatureType_Native, "L4D_ReplaceTank") != FeatureStatus_Available)
@@ -1587,7 +1724,9 @@ bool SpawnByToken(int admin, const char[] token)
     {
         if (GetFeatureStatus(FeatureType_Native, "L4D2_SpawnTank") == FeatureStatus_Available)
         {
+            SetAdminTankSpawnBypass(true);
             entity = L4D2_SpawnTank(pos, ang);
+            SetAdminTankSpawnBypass(false);
         }
     }
     else if (StrEqual(token, "witch", false))
@@ -1735,6 +1874,37 @@ bool IsPointsAdmin(int client)
 bool ShopApiAvailable()
 {
     return LibraryExists("l4d2_campaign_shop") && GetFeatureStatus(FeatureType_Native, "L4D2CampaignShop_GetPoints") == FeatureStatus_Available;
+}
+
+bool PlayableWitchApiAvailable()
+{
+    if (GetFeatureStatus(FeatureType_Native, "L4D2PlayableWitch_IsAvailable") != FeatureStatus_Available
+        || GetFeatureStatus(FeatureType_Native, "L4D2PlayableWitch_Request") != FeatureStatus_Available)
+    {
+        return false;
+    }
+    return L4D2PlayableWitch_IsAvailable();
+}
+
+bool RequestPlayableWitch(int admin, int target)
+{
+    if (!IsValidTarget(admin, target) || !PlayableWitchApiAvailable()
+        || !L4D2PlayableWitch_Request(target, PlayableWitchSource_Admin))
+    {
+        return false;
+    }
+    PrintToChat(admin, "\x04[PVE]\x01 已让 %N 成为可控 Witch。", target);
+    Audit(admin, target, "playable_witch", "source=admin");
+    return true;
+}
+
+void SetAdminTankSpawnBypass(bool enabled)
+{
+    ConVar bypass = FindConVar("l4d2_pve_infected_admin_spawn_bypass");
+    if (bypass != null)
+    {
+        bypass.SetBool(enabled);
+    }
 }
 
 void ReturnToAdminMenu(int client)

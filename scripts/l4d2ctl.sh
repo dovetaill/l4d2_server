@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 umask 077
-ROOT_DIR=/opt/l4d2
+ROOT_DIR="${L4D2_TARGET_ROOT:-/opt/l4d2}"
 GAME_DIR="$ROOT_DIR/server/left4dead2"
-WEB_ENV=/etc/l4d2/l4d2-admin.env
+WEB_ENV="${L4D2_WEB_ENV:-/etc/l4d2/l4d2-admin.env}"
 RUNTIME_CFG="$GAME_DIR/cfg/pve_runtime.cfg"
 MOTD_FILE="$GAME_DIR/motd.txt"
 HELP_TEXT_FILE="$GAME_DIR/cfg/sourcemod/l4d2_pve_help_menu_content.txt"
@@ -16,7 +16,37 @@ load_env(){ [[ -r "$WEB_ENV" ]] || die "缺少 $WEB_ENV"; set -a; source "$WEB_E
 rcon(){ [[ -n "$RCON_PASSWORD" ]] || die '未配置 RCON_PASSWORD'; RCON_HOST="$RCON_HOST" RCON_PORT="$RCON_PORT" PYTHONPATH="$ROOT_DIR/scripts" RCON_PASSWORD="$RCON_PASSWORD" python3 -c 'import os,sys; from l4d2_web_admin import Rcon; r=Rcon(os.environ["RCON_HOST"],int(os.environ["RCON_PORT"]),os.environ["RCON_PASSWORD"]); r.__enter__();
 try: print(r.command(sys.argv[1]),end="")
 finally: r.__exit__()' "$*"; }
-service(){ case "$1" in start) systemctl start l4d2.service;; stop) systemctl stop l4d2.service;; restart) systemctl restart l4d2.service;; update) [[ -d "$ROOT_DIR/.git" ]] || die '没有 Git 工作树'; git -C "$ROOT_DIR" diff --quiet --ignore-submodules -- || die '工作树有未提交改动'; git -C "$ROOT_DIR" diff --cached --quiet --ignore-submodules -- || die '暂存区有未提交改动'; git -C "$ROOT_DIR" pull --ff-only; systemctl restart l4d2.service;; *) die "未知服务命令 $1";; esac; }
+update_from_release() (
+  local url="${L4D2_RELEASE_ARCHIVE_URL:-}" sha="${L4D2_RELEASE_ARCHIVE_SHA256:-}" tmp='' archive source
+  cleanup_release_tmp(){
+    local status=$?
+    if [[ -n "$tmp" && -d "$tmp" ]]; then
+      find "$tmp" -depth -delete || printf '[l4d2ctl] 警告：无法完整清理发布临时目录：%s\n' "$tmp" >&2
+    fi
+    return "$status"
+  }
+  trap cleanup_release_tmp EXIT
+  [[ -n "$url" ]] || die '更新需要 L4D2_RELEASE_ARCHIVE_URL；更新不从运行目录执行版本控制操作'
+  [[ "$url" == https://* ]] || die '发布归档 URL 必须使用 HTTPS'
+  [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || die '更新需要完整的 L4D2_RELEASE_ARCHIVE_SHA256'
+  tmp=$(mktemp -d /tmp/l4d2ctl-release.XXXXXX)
+  archive="$tmp/release.tar.gz"
+  curl -fL --retry 3 --retry-delay 1 --connect-timeout 20 "$url" -o "$archive"
+  printf '%s  %s\n' "$sha" "$archive" | sha256sum -c - >/dev/null || die '发布归档 SHA-256 校验失败'
+  mkdir "$tmp/source"
+  case "$url" in
+    *.zip|*.zip\?*) unzip -q "$archive" -d "$tmp/source";;
+    *) tar -xzf "$archive" -C "$tmp/source";;
+  esac
+  source=$(find "$tmp/source" -type f -path '*/scripts/bootstrap_l4d2.sh' -printf '%h/..\n' -quit)
+  [[ -n "$source" && -x "$source/scripts/bootstrap_l4d2.sh" ]] || die '归档中缺少 scripts/bootstrap_l4d2.sh'
+  source=$(cd "$source" && pwd)
+  log '使用已校验的发布归档执行非破坏性更新。'
+  L4D2_TARGET_ROOT="$ROOT_DIR" L4D2_SOURCE_ROOT="$source" \
+    "$source/scripts/bootstrap_l4d2.sh" --update --no-start
+  systemctl restart l4d2.service
+)
+service(){ case "$1" in start) systemctl start l4d2.service;; stop) systemctl stop l4d2.service;; restart) systemctl restart l4d2.service;; update) update_from_release;; *) die "未知服务命令 $1";; esac; }
 write_cvar(){ local key=$1 val=$2 tmp; install -d "$(dirname "$RUNTIME_CFG")"; tmp=$(mktemp); [[ -f "$RUNTIME_CFG" ]] && awk -v k="$key" '$1!=k{print}' "$RUNTIME_CFG" >"$tmp"; printf '%s %s\n' "$key" "$val" >>"$tmp"; install -m0644 "$tmp" "$RUNTIME_CFG"; rm -f "$tmp"; }
 q(){ local v=$1; v=${v//\\/\\\\}; v=${v//\"/\\\"}; printf '"%s"' "$v"; }
 set_name(){ [[ -n "$1" && ${#1} -le 64 && "$1" != *$'\n'* ]] || die '大厅名称无效'; write_cvar hostname "$(q "$1")"; rcon "hostname $(q "$1")" || true; log "大厅名称：$1"; }

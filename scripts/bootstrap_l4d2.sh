@@ -3,13 +3,13 @@
 set -Eeuo pipefail
 umask 077
 
-TARGET_ROOT="/opt/l4d2"
+TARGET_ROOT="${L4D2_TARGET_ROOT:-/opt/l4d2}"
 SERVER_DIR="${TARGET_ROOT}/server"
 GAME_DIR="${SERVER_DIR}/left4dead2"
 STEAMCMD_DIR="${TARGET_ROOT}/steamcmd"
-SERVICE_USER="l4d2srv"
-SERVICE_GROUP="l4d2srv"
-ETC_DIR="/etc/l4d2"
+SERVICE_USER="${L4D2_SERVICE_USER:-l4d2srv}"
+SERVICE_GROUP="${L4D2_SERVICE_GROUP:-l4d2srv}"
+ETC_DIR="${L4D2_ETC_ROOT:-/etc/l4d2}"
 GAME_ENV="${ETC_DIR}/l4d2.env"
 WEB_ENV="${ETC_DIR}/l4d2-admin.env"
 PRIVATE_CFG="${GAME_DIR}/cfg/server_private.cfg"
@@ -21,8 +21,15 @@ STEAMCMD_URL="https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.ta
 
 UPDATE_ONLY=0
 NO_START=0
+SKIP_APT="${L4D2_SKIP_APT:-0}"
+SKIP_STEAM="${L4D2_SKIP_STEAM:-0}"
+SKIP_FRAMEWORKS="${L4D2_SKIP_FRAMEWORKS:-0}"
+SKIP_PRIVATE_CONFIG="${L4D2_SKIP_PRIVATE_CONFIG:-0}"
+SKIP_SERVICES="${L4D2_SKIP_SERVICES:-0}"
+DOWNLOAD_CACHE="${L4D2_DOWNLOAD_CACHE:-}"
 TEMP_DIR=""
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="${L4D2_SOURCE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+MANIFEST_FILE="${PROJECT_ROOT}/scripts/l4d2_artifact_manifest.sh"
 
 log() {
     printf '[bootstrap] %s\n' "$*"
@@ -37,15 +44,58 @@ die() {
     exit 1
 }
 
+load_manifest() {
+    [[ -f "${MANIFEST_FILE}" ]] || die "Artifact manifest is missing: ${MANIFEST_FILE}"
+    # shellcheck disable=SC1090
+    source "${MANIFEST_FILE}"
+    l4d2_manifest_validate || die "Artifact manifest validation failed."
+}
+
+download_artifact() {
+    local key="$1" destination="$2" cache_file
+    [[ -n "${L4D2_ARTIFACT_URL[$key]:-}" ]] || die "Unknown artifact key: ${key}"
+    cache_file="${DOWNLOAD_CACHE:+${DOWNLOAD_CACHE}/${L4D2_ARTIFACT_FILE[$key]}}"
+    if [[ -n "${cache_file}" && -f "${cache_file}" ]]; then
+        log "Using verified cache for ${key}."
+        install -m 0644 "${cache_file}" "${destination}"
+    else
+        log "Downloading ${L4D2_ARTIFACT_VERSION[$key]}."
+        curl -fL --retry 3 --retry-delay 1 --connect-timeout 20 \
+            "${L4D2_ARTIFACT_URL[$key]}" -o "${destination}"
+    fi
+    printf '%s  %s\n' "${L4D2_ARTIFACT_SHA256[$key]}" "${destination}" | sha256sum -c - >/dev/null \
+        || die "SHA-256 verification failed for ${key}."
+}
+
+extract_tar_overlay() {
+    local archive="$1" target="$2" key="$3" extract_root top
+    extract_root="${TEMP_DIR}/extract-${key}"
+    install -d "${extract_root}"
+    tar -xzf "${archive}" -C "${extract_root}"
+    top="$(find "${extract_root}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+    [[ -n "${top}" ]] || die "Archive ${key} has no top-level directory."
+    if [[ -d "${top}/addons" ]]; then
+        rsync -a "${top}/addons/" "${GAME_DIR}/addons/"
+    elif [[ -d "${top}/sourcemod" ]]; then
+        rsync -a "${top}/sourcemod/" "${GAME_DIR}/addons/sourcemod/"
+    else
+        die "Archive ${key} has no supported SourceMod layout."
+    fi
+}
+
 usage() {
     cat <<'EOF'
 Usage: sudo ./scripts/bootstrap_l4d2.sh [--update] [--no-start]
 
-  --update    Update an existing non-destructive installation. When this
-              script runs inside /opt/l4d2, a clean Git checkout is updated
-              with git pull --ff-only before the runtime update.
-  --no-start  Install, compile, and create/enable services without starting or
-              restarting them.
+  --update    Update an existing installation from this source tree or release
+              archive. The installer never pulls or mutates a VCS checkout.
+  --no-start  Install and compile without starting or restarting services.
+
+Environment switches for isolated validation:
+  L4D2_TARGET_ROOT, L4D2_ETC_ROOT, L4D2_SOURCE_ROOT
+  L4D2_SKIP_APT=1, L4D2_SKIP_STEAM=1, L4D2_SKIP_FRAMEWORKS=1
+  L4D2_SKIP_PRIVATE_CONFIG=1, L4D2_SKIP_SERVICES=1
+  L4D2_DOWNLOAD_CACHE=/path/to/verified/artifacts
 
 Optional first-install environment variables:
   RCON_PASSWORD  RCON password written only to private runtime files.
@@ -62,7 +112,7 @@ EOF
 
 cleanup() {
     if [[ -n "${TEMP_DIR}" && -d "${TEMP_DIR}" ]]; then
-        rm -rf -- "${TEMP_DIR}"
+        find "${TEMP_DIR}" -depth -delete
     fi
 }
 trap cleanup EXIT
@@ -152,6 +202,10 @@ escape_double_quoted() {
 }
 
 install_dependencies() {
+    if [[ "${SKIP_APT}" == "1" ]]; then
+        log "L4D2_SKIP_APT=1; dependency installation skipped."
+        return
+    fi
     log "Enabling i386 and installing Debian dependencies."
     if ! dpkg --print-foreign-architectures | grep -qx i386; then
         dpkg --add-architecture i386
@@ -164,11 +218,12 @@ install_dependencies() {
     fi
 
     DEBIAN_FRONTEND=noninteractive apt-get install -y \
-        git curl wget ca-certificates file tar gzip xz-utils unzip bzip2 \
+        curl wget ca-certificates file tar gzip xz-utils unzip bzip2 \
         tmux htop sysstat openssl rsync python3 util-linux \
         lib32gcc-s1 lib32stdc++6 libc6:i386 libstdc++6:i386 zlib1g:i386 \
         "${curl32}" libsdl2-2.0-0:i386
 }
+
 
 ensure_service_user() {
     if ! id "${SERVICE_USER}" >/dev/null 2>&1; then
@@ -183,31 +238,17 @@ sync_project_tree() {
     install -d -m 0755 "${TARGET_ROOT}"
 
     if [[ "${PROJECT_ROOT}" == "${TARGET_ROOT}" ]]; then
-        if (( UPDATE_ONLY )) && [[ -d "${TARGET_ROOT}/.git" ]]; then
-            if git -C "${TARGET_ROOT}" diff --quiet --ignore-submodules -- && \
-               git -C "${TARGET_ROOT}" diff --cached --quiet --ignore-submodules --; then
-                log "Updating clean /opt/l4d2 checkout with git pull --ff-only."
-                git -C "${TARGET_ROOT}" pull --ff-only
-            else
-                warn "Tracked changes exist in /opt/l4d2; skipped git pull to preserve them."
-            fi
-        fi
+        log "Source and target are the same tree; no VCS operation is performed."
         return
     fi
 
-    log "Synchronizing tracked/non-ignored project files into ${TARGET_ROOT} without deleting runtime files."
-    if [[ ! -d "${TARGET_ROOT}/.git" && -d "${PROJECT_ROOT}/.git" ]]; then
-        cp -a "${PROJECT_ROOT}/.git" "${TARGET_ROOT}/.git"
-    fi
+    log "Synchronizing project files into ${TARGET_ROOT} without deleting runtime files."
     if [[ -d "${PROJECT_ROOT}/.git" ]]; then
-        # Copy the current checkout, including non-ignored worktree additions,
-        # without copying ignored Steam/runtime/private state from the source.
         git -C "${PROJECT_ROOT}" ls-files -z --cached --others --exclude-standard | \
             rsync -a --from0 --files-from=- "${PROJECT_ROOT}/" "${TARGET_ROOT}/"
     else
-        # A source archive has no Git index. Keep the exclusions explicit and
-        # still never use --delete against an existing production directory.
         rsync -a \
+            --exclude '/.git/' \
             --exclude '/lost+found/' \
             --exclude '/steamcmd/' \
             --exclude '/server/left4dead2/cfg/server_private.cfg' \
@@ -216,6 +257,7 @@ sync_project_tree() {
             "${PROJECT_ROOT}/" "${TARGET_ROOT}/"
     fi
 }
+
 
 set_runtime_ownership() {
     # Keep deployment code and Git metadata root-owned. Only the game and
@@ -232,10 +274,14 @@ set_runtime_ownership() {
 }
 
 install_steamcmd() {
+    if [[ "${SKIP_STEAM}" == "1" ]]; then
+        log "L4D2_SKIP_STEAM=1; SteamCMD/AppID 222860 installation skipped."
+        return
+    fi
     install -d -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" "${STEAMCMD_DIR}"
     if [[ ! -x "${STEAMCMD_DIR}/steamcmd.sh" ]]; then
         log "Installing SteamCMD."
-        curl -fL --retry 3 "${STEAMCMD_URL}" -o "${TEMP_DIR}/steamcmd.tar.gz"
+        download_artifact steamcmd "${TEMP_DIR}/steamcmd.tar.gz"
         tar -xzf "${TEMP_DIR}/steamcmd.tar.gz" -C "${STEAMCMD_DIR}"
         chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${STEAMCMD_DIR}"
     fi
@@ -256,26 +302,152 @@ install_steamcmd() {
     [[ -x "${SERVER_DIR}/srcds_run" ]] || die "SteamCMD completed but ${SERVER_DIR}/srcds_run is missing."
 }
 
+
 install_frameworks() {
+    if [[ "${SKIP_FRAMEWORKS}" == "1" ]]; then
+        log "L4D2_SKIP_FRAMEWORKS=1; framework installation skipped."
+        return
+    fi
+    install -d "${GAME_DIR}/addons" "${GAME_DIR}/addons/sourcemod"
+
     log "Installing MetaMod:Source ${MM_VERSION}."
-    curl -fL --retry 3 "${MM_URL}" -o "${TEMP_DIR}/metamod.tar.gz"
+    download_artifact metamod "${TEMP_DIR}/metamod.tar.gz"
     tar -xzf "${TEMP_DIR}/metamod.tar.gz" -C "${GAME_DIR}"
 
     log "Installing SourceMod ${SM_VERSION}."
-    curl -fL --retry 3 "${SM_URL}" -o "${TEMP_DIR}/sourcemod.tar.gz"
+    download_artifact sourcemod "${TEMP_DIR}/sourcemod.tar.gz"
     tar -xzf "${TEMP_DIR}/sourcemod.tar.gz" -C "${GAME_DIR}"
 
-    # L4D2 does not support SourceMod's generic nextmap plugin. Keep the
-    # framework copy disabled so every fresh bootstrap starts without Bad Load.
+    log "Installing L4DToolZ, Actions 3.9.2, Left4DHooks 1.168, Dynamic Balancer and Mutant Tanks 9.3."
+    download_artifact l4dtoolz "${TEMP_DIR}/l4dtoolz.zip"
+    unzip -oq "${TEMP_DIR}/l4dtoolz.zip" -d "${GAME_DIR}/addons"
+    download_artifact actions "${TEMP_DIR}/actions.zip"
+    install -d "${GAME_DIR}/addons/sourcemod/extensions" "${GAME_DIR}/addons/sourcemod/gamedata" "${GAME_DIR}/addons/sourcemod/scripting/include"
+    unzip -oq "${TEMP_DIR}/actions.zip" -d "${TEMP_DIR}/actions"
+    rsync -a "${TEMP_DIR}/actions/actions.ext/extensions/" "${GAME_DIR}/addons/sourcemod/extensions/"
+    rsync -a "${TEMP_DIR}/actions/actions.ext/gamedata/" "${GAME_DIR}/addons/sourcemod/gamedata/"
+    rsync -a "${TEMP_DIR}/actions/actions.ext/scripting/include/" "${GAME_DIR}/addons/sourcemod/scripting/include/"
+
+    download_artifact left4dhooks "${TEMP_DIR}/left4dhooks.tar.gz"
+    extract_tar_overlay "${TEMP_DIR}/left4dhooks.tar.gz" "${GAME_DIR}" left4dhooks
+    download_artifact mutant_tanks "${TEMP_DIR}/mutant_tanks.tar.gz"
+    extract_tar_overlay "${TEMP_DIR}/mutant_tanks.tar.gz" "${GAME_DIR}" mutant_tanks
+    download_artifact dynamic_balancer "${TEMP_DIR}/dynamic_balancer.zip"
+    unzip -oq "${TEMP_DIR}/dynamic_balancer.zip" -d "${TEMP_DIR}/dynamic_balancer"
+    if [[ -f "${TEMP_DIR}/dynamic_balancer/plugins/l4d2_balancer_spawn_dyn.smx" ]]; then
+        install -m 0644 "${TEMP_DIR}/dynamic_balancer/plugins/l4d2_balancer_spawn_dyn.smx" "${GAME_DIR}/addons/sourcemod/plugins/l4d2_balancer_spawn_dyn.smx"
+    fi
+
+    # L4D2 is a 32-bit server. Disable only the x64 MetaMod VDF probe; keep
+    # the normal VDF, 32-bit module and the linux64 binary for other games.
+    find "${GAME_DIR}/addons" -type f -name 'metamod_x64.vdf' -delete
+
     if [[ -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" ]]; then
         install -d "${GAME_DIR}/addons/sourcemod/plugins/disabled"
         mv -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" \
             "${GAME_DIR}/addons/sourcemod/plugins/disabled/nextmap.smx"
     fi
 
-    # Reapply project-owned configs and plugins after framework extraction.
     sync_project_tree
     set_runtime_ownership
+}
+
+
+
+compile_vendor_plugin() {
+    local key="$1" source_name="$2" output_name="$3"
+    local source compiler temp_output compile_log
+    compiler="${GAME_DIR}/addons/sourcemod/scripting/spcomp"
+    source="$(find "${TEMP_DIR}/${key}" -type f -name "${source_name}" -print -quit)"
+    [[ -n "${source}" ]] || die "Required vendor source is missing: ${key}/${source_name}"
+    [[ -x "${compiler}" ]] || die "SourcePawn compiler is missing: ${compiler}"
+
+    install -d "${TEMP_DIR}/vendor-smx"
+    temp_output="${TEMP_DIR}/vendor-smx/${output_name}"
+    compile_log="${TEMP_DIR}/vendor-${output_name}.log"
+    if (cd "$(dirname "${source}")" && "${compiler}" \
+            -iinclude \
+            -i"${GAME_DIR}/addons/sourcemod/scripting/include" \
+            "${source_name}" -o"${temp_output}") >"${compile_log}" 2>&1; then
+        log "Staged vendor ${source_name} -> ${output_name}"
+    else
+        sed -n '1,160p' "${compile_log}" >&2
+        die "Vendor SourcePawn compilation failed: ${source_name}"
+    fi
+}
+
+install_gameplay_packages() {
+    local key archive extract_root root package_dir plugin_dir base
+    local -a bundle_keys=(fbef_plugins wyxls_plugins dual_primary predicaments votekick no_friendly_fire smac multicolors)
+    for key in "${bundle_keys[@]}"; do
+        archive="${TEMP_DIR}/${key}.tar.gz"
+        download_artifact "${key}" "${archive}"
+        extract_root="${TEMP_DIR}/${key}"
+        install -d "${extract_root}"
+        tar -xzf "${archive}" -C "${extract_root}"
+    done
+
+    install -d "${GAME_DIR}/addons/sourcemod/plugins" \
+        "${GAME_DIR}/addons/sourcemod/gamedata" \
+        "${GAME_DIR}/addons/sourcemod/data" \
+        "${GAME_DIR}/addons/sourcemod/configs" \
+        "${GAME_DIR}/addons/sourcemod/translations" \
+        "${GAME_DIR}/addons/sourcemod/scripting/include" \
+        "${GAME_DIR}/cfg/sourcemod"
+
+    # These repositories publish each plugin as a complete package directory.
+    # Copy only runtime companions; README/images/source are not runtime input.
+    for key in fbef_plugins wyxls_plugins; do
+        while IFS= read -r -d '' plugin_dir; do
+            base="${plugin_dir%/plugins}"
+            case "${base}" in *BasicEnvs*) continue ;; esac
+            find "${plugin_dir}" -maxdepth 1 -type f -name '*.smx' -exec install -m 0644 {} "${GAME_DIR}/addons/sourcemod/plugins/" \;
+            for package_dir in gamedata data translations; do
+                [[ -d "${base}/${package_dir}" ]] && rsync -a "${base}/${package_dir}/" "${GAME_DIR}/addons/sourcemod/${package_dir}/"
+            done
+            [[ -d "${base}/scripting/include" ]] && rsync -a "${base}/scripting/include/" "${GAME_DIR}/addons/sourcemod/scripting/include/"
+            [[ -d "${base}/cfg" ]] && rsync -a "${base}/cfg/" "${GAME_DIR}/cfg/"
+            [[ -d "${base}/configs" ]] && rsync -a "${base}/configs/" "${GAME_DIR}/cfg/sourcemod/"
+        done < <(find "${TEMP_DIR}/${key}" -type d -name plugins -print0)
+    done
+
+    # The remaining fixed sources may publish either a runtime plugin or a
+    # source/include pair. Install every runtime companion when present.
+    for key in dual_primary predicaments votekick no_friendly_fire smac; do
+        find "${TEMP_DIR}/${key}" -type f -name '*.smx' -exec install -m 0644 {} "${GAME_DIR}/addons/sourcemod/plugins/" \;
+        find "${TEMP_DIR}/${key}" -type d -name gamedata -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/gamedata/" \;
+        find "${TEMP_DIR}/${key}" -type d -name data -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/data/" \;
+        find "${TEMP_DIR}/${key}" -type d -name translations -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/translations/" \;
+        find "${TEMP_DIR}/${key}" -type d -name configs -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/configs/" \;
+        find "${TEMP_DIR}/${key}" -type d -name cfg -exec rsync -a {}/ "${GAME_DIR}/cfg/" \;
+        find "${TEMP_DIR}/${key}" -type d -path '*/scripting/include' -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/scripting/include/" \;
+    done
+
+    # MultiColors is an include-only dependency required while compiling SMAC.
+    # Preserve its nested multicolors/ directory because multicolors.inc imports it.
+    while IFS= read -r -d '' package_dir; do
+        rsync -a "${package_dir}/" "${GAME_DIR}/addons/sourcemod/scripting/include/"
+    done < <(find "${TEMP_DIR}/multicolors" -type d -path '*/scripting/include' -print0)
+
+    # These pinned repositories publish source only. Compile the exact runtime
+    # profile after all includes are installed and replace plugins atomically.
+    compile_vendor_plugin dual_primary dual_primaries.sp dual_primaries.smx
+    compile_vendor_plugin votekick l4d_votekick.sp l4d_votekick.smx
+    compile_vendor_plugin smac smac.sp smac.smx
+    compile_vendor_plugin smac smac_aimbot.sp smac_aimbot.smx
+    compile_vendor_plugin smac smac_commands.sp smac_commands.smx
+    compile_vendor_plugin smac smac_cvars.sp smac_cvars.smx
+    compile_vendor_plugin smac smac_l4d2_fixes.sp smac_l4d2_fixes.smx
+    compile_vendor_plugin smac smac_speedhack.sp smac_speedhack.smx
+
+    # Publish the selected vendor profile only after every source compiled.
+    for base in dual_primaries.smx l4d_votekick.smx smac.smx smac_aimbot.smx \
+        smac_commands.smx smac_cvars.smx smac_l4d2_fixes.smx smac_speedhack.smx; do
+        install -m 0644 "${TEMP_DIR}/vendor-smx/${base}" "${GAME_DIR}/addons/sourcemod/plugins/${base}"
+    done
+
+    # Keep the project-owned pve_pvpve profile and all private/runtime data.
+    log "Installed fixed-source gameplay packages and companion files."
 }
 
 compile_plugins() {
@@ -284,14 +456,20 @@ compile_plugins() {
     local plugins="${GAME_DIR}/addons/sourcemod/plugins"
     local failures=0
     local item source relative output temp_output compile_log
+    local -a warning_flags=()
     local entries=(
         "l4d2_campaign_shop.sp:l4d2_campaign_shop.smx"
+        "l4d2_clear_thirdstrike.sp:l4d2_clear_thirdstrike.smx"
+        "l4d2_combat_rewards.sp:l4d2_combat_rewards.smx"
+        "l4d2_end_safearea_teleport.sp:l4d2_end_safearea_teleport.smx"
         "l4d2_pve_admin.sp:l4d2_pve_admin.smx"
         "l4d2_pve_help_menu.sp:l4d2_pve_help_menu.smx"
         "l4d2_pve_infected_core.sp:l4d2_pve_infected_core.smx"
         "l4d2_switch_upgrade_ammo.sp:l4d2_switch_ammo.smx"
         "third_party/l4d2_double_jump.sp:l4d2_double_jump.smx"
         "l4d2_pve_damage_display.sp:l4d2_pve_damage_display.smx"
+        "l4d2_playable_witch.sp:l4d2_playable_witch.smx"
+        "l4d2_pve_mutant_tanks.sp:l4d2_pve_mutant_tanks.smx"
         "third_party/command_buffer.sp:command_buffer.smx"
     )
 
@@ -311,7 +489,14 @@ compile_plugins() {
             failures=$((failures + 1))
             continue
         fi
-        if (cd "${scripting}" && "${compiler}" "${relative}" -o"${temp_output}") >"${compile_log}" 2>&1; then
+        warning_flags=()
+        if [[ "${relative}" == "l4d2_pve_mutant_tanks.sp" ]]; then
+            # MT_CanTankSpawn is the compatibility stock for older 9.3 includes.
+            warning_flags=(-w234)
+        fi
+        if (cd "${scripting}" && "${compiler}" \
+                -i"${scripting}/include" "${warning_flags[@]}" \
+                "${relative}" -o"${temp_output}") >"${compile_log}" 2>&1; then
             install -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" -m 0644 \
                 "${temp_output}" "${plugins}/${output}"
             log "Compiled ${relative} -> ${output}"
@@ -328,6 +513,10 @@ compile_plugins() {
 }
 
 write_private_configuration() {
+    if [[ "${SKIP_PRIVATE_CONFIG}" == "1" ]]; then
+        log "L4D2_SKIP_PRIVATE_CONFIG=1; private configuration generation skipped."
+        return
+    fi
     local existing_rcon=""
     local existing_web_password=""
     local rcon_password=""
@@ -411,15 +600,19 @@ EOF
 install_steamclient_link() {
     local home_dir
     local steamclient="${STEAMCMD_DIR}/linux32/steamclient.so"
-    [[ -f "${steamclient}" ]] || return
+    [[ -f "${steamclient}" ]] || return 0
     home_dir="$(getent passwd "${SERVICE_USER}" | cut -d: -f6)"
-    [[ -n "${home_dir}" ]] || return
+    [[ -n "${home_dir}" ]] || return 0
     install -d -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" "${home_dir}/.steam/sdk32"
     ln -sfn "${steamclient}" "${home_dir}/.steam/sdk32/steamclient.so"
     chown -h "${SERVICE_USER}:${SERVICE_GROUP}" "${home_dir}/.steam/sdk32/steamclient.so"
 }
 
 install_services() {
+    if [[ "${SKIP_SERVICES}" == "1" ]]; then
+        log "L4D2_SKIP_SERVICES=1; systemd unit changes skipped."
+        return
+    fi
     log "Creating systemd units."
     cat >/etc/systemd/system/l4d2.service <<'EOF'
 [Unit]
@@ -514,12 +707,16 @@ start_services() {
 
 main() {
     TEMP_DIR="$(mktemp -d /tmp/l4d2-bootstrap.XXXXXX)"
+    load_manifest
     install_dependencies
     ensure_service_user
     sync_project_tree
     set_runtime_ownership
     install_steamcmd
     install_frameworks
+    if [[ "${SKIP_FRAMEWORKS}" != "1" ]]; then
+        install_gameplay_packages
+    fi
     write_private_configuration
     install_steamclient_link
     compile_plugins

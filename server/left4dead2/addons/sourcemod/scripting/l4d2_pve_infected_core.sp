@@ -6,6 +6,8 @@
 #include <left4dhooks>
 #include <l4dinfectedbots>
 #include <l4d2_campaign_shop>
+#include <l4d2_playable_witch>
+#include <l4d2_pve_mutant_tanks>
 
 #define PLUGIN_VERSION "0.1.1"
 
@@ -49,6 +51,7 @@ ConVar g_cvTankSpawnMinInterval;
 ConVar g_cvTankHumanPerChapter;
 ConVar g_cvTankPlayerPerChapter;
 ConVar g_cvTankPlayerCooldown;
+ConVar g_cvAdminSpawnBypass;
 ConVar g_cvLifeHealthCost;
 ConVar g_cvLifeCooldownCost;
 ConVar g_cvGhostCost;
@@ -129,6 +132,7 @@ public void OnPluginStart()
     g_cvTankHumanPerChapter = CreateConVar("l4d2_pve_infected_tank_human_per_chapter", "1", "Maximum Tanks handed to human players per chapter. Zero disables human Tank control.", FCVAR_NOTIFY, true, 0.0, true, 8.0);
     g_cvTankPlayerPerChapter = CreateConVar("l4d2_pve_infected_tank_player_per_chapter", "1", "Maximum Tank controls per player per chapter. Zero disables human Tank control.", FCVAR_NOTIFY, true, 0.0, true, 8.0);
     g_cvTankPlayerCooldown = CreateConVar("l4d2_pve_infected_tank_player_cooldown", "1800.0", "Seconds before the same player may control another Tank across chapter transitions.", FCVAR_NOTIFY, true, 0.0);
+    g_cvAdminSpawnBypass = CreateConVar("l4d2_pve_infected_admin_spawn_bypass", "0", "Internal one-shot bypass for administrator-forced Tank spawns.", FCVAR_DONTRECORD, true, 0.0, true, 1.0);
     HookConVarChange(g_cvTankSpawnMinInterval, ConVarChanged_TankSpawnMinInterval);
     g_cvLifeHealthCost = CreateConVar("l4d2_pve_infected_life_health_cost", "25", "Campaign points for current-life SI health boost.", FCVAR_NOTIFY, true, 0.0);
     g_cvLifeCooldownCost = CreateConVar("l4d2_pve_infected_life_cooldown_cost", "30", "Campaign points for current-life SI cooldown boost.", FCVAR_NOTIFY, true, 0.0);
@@ -140,6 +144,7 @@ public void OnPluginStart()
     g_cvTankArrivalPerPlayer = CreateConVar("l4d2_pve_infected_tank_arrival_per_player", "1", "Maximum purchased Tank Arrivals per player per campaign.", FCVAR_NOTIFY, true, 0.0, true, 2.0);
     g_cvWitchCost = CreateConVar("l4d2_pve_infected_witch_cost", "150", "Campaign points for experimental Witch control.", FCVAR_NOTIFY, true, 0.0);
     g_cvWitchChance = CreateConVar("l4d2_pve_infected_witch_chance", "2.5", "Reserved chance for experimental Witch selection; requires a playable Witch module.", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+    HookConVarChange(g_cvWitchChance, ConVarChanged_WitchChance);
     g_cvHUD = CreateConVar("l4d2_pve_infected_hud", "1", "Show the infected PvPvE HUD.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
     g_cvHUDRate = CreateConVar("l4d2_pve_infected_hud_rate", "0.50", "HUD refresh interval in seconds.", FCVAR_NOTIFY, true, 0.25, true, 4.0);
     g_cvPointsDamageInterval = CreateConVar("l4d2_pve_infected_damage_points_interval", "100", "Human survivor damage needed for one infected point.", FCVAR_NOTIFY, true, 1.0);
@@ -197,6 +202,33 @@ public void ConVarChanged_TankSpawnMinInterval(ConVar convar, const char[] oldVa
     ApplyTankDirectorInterval();
 }
 
+public void OnAllPluginsLoaded()
+{
+    ApplyPlayableWitchChance();
+}
+
+public void OnLibraryAdded(const char[] name)
+{
+    if (StrEqual(name, "l4d2_playable_witch"))
+    {
+        ApplyPlayableWitchChance();
+    }
+}
+
+public void ConVarChanged_WitchChance(ConVar convar, const char[] oldValue, const char[] newValue)
+{
+    ApplyPlayableWitchChance();
+}
+
+void ApplyPlayableWitchChance()
+{
+    ConVar playableChance = FindConVar("pve_playable_witch_random_chance");
+    if (playableChance != null)
+    {
+        playableChance.SetFloat(g_cvWitchChance.FloatValue);
+    }
+}
+
 void ApplyTankDirectorInterval()
 {
     float interval = g_cvTankSpawnMinInterval.FloatValue;
@@ -231,9 +263,14 @@ public void OnMapStart()
     {
         ResetCampaignState();
     }
+    else
+    {
+        ResetChapterState();
+    }
     strcopy(g_sCampaign, sizeof(g_sCampaign), campaign);
     g_bLeftSafeArea = false;
     g_bFinaleLocked = false;
+    g_fLastTankSpawnTime = 0.0;
     g_iPendingTankBuyer = 0;
 }
 
@@ -603,6 +640,12 @@ void BuyInfectedItem(int client, const char[] item)
     }
     else if (StrEqual(item, "witch"))
     {
+        if (!L4D2PlayableWitch_Request(client, PlayableWitchSource_Purchase))
+        {
+            AddPoints(client, price);
+            PrintToChat(client, "\x04[感染者]\x01 Witch 实体控制启动失败，积分已退回。\x01");
+            return;
+        }
         g_bBoughtWitch[client] = true;
     }
     else if (StrEqual(item, "priority"))
@@ -734,7 +777,7 @@ public void Event_PlayerHurt(Event event, const char[] name, bool dontBroadcast)
 
 public Action L4D_OnSpawnTank(const float vecPos[3], const float vecAng[3])
 {
-    if (!CanUseCore() || g_bFinaleLocked || g_iPendingTankBuyer > 0)
+    if (!CanUseCore() || g_bFinaleLocked || g_iPendingTankBuyer > 0 || g_cvAdminSpawnBypass.BoolValue)
     {
         return Plugin_Continue;
     }
@@ -1300,6 +1343,10 @@ bool SpawnPurchasedTank(int buyer)
     ang[1] = 0.0;
     ang[2] = 0.0;
     g_iPendingTankBuyer = buyer;
+    if (GetFeatureStatus(FeatureType_Native, "L4D2PveMutantTanks_MarkNextSpawn") == FeatureStatus_Available)
+    {
+        L4D2PveMutantTanks_MarkNextSpawn(PveMutantTankSource_Purchase, 0);
+    }
     int tank = L4D2_SpawnTank(pos, ang);
     if (tank <= 0)
     {
@@ -1312,11 +1359,12 @@ bool SpawnPurchasedTank(int buyer)
 
 bool IsPlayableWitchAvailable()
 {
-    if (g_cvWitchChance.FloatValue <= 0.0)
+    if (GetFeatureStatus(FeatureType_Native, "L4D2PlayableWitch_IsAvailable") != FeatureStatus_Available
+        || GetFeatureStatus(FeatureType_Native, "L4D2PlayableWitch_Request") != FeatureStatus_Available)
     {
         return false;
     }
-    return GetFeatureStatus(FeatureType_Native, "L4D2PlayableWitch_IsAvailable") == FeatureStatus_Available;
+    return L4D2PlayableWitch_IsAvailable();
 }
 
 bool RefreshAbility(int client)
@@ -1615,13 +1663,24 @@ void ResetCampaignState()
 {
     g_iTankArrivals = 0;
     g_iPendingTankBuyer = 0;
+    ResetChapterState();
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        g_bTankPriority[client] = false;
+        g_bBoughtTankArrival[client] = false;
+        g_bTankRecent[client] = false;
+    }
+}
+
+void ResetChapterState()
+{
     g_iHumanTankControlsThisChapter = 0;
     g_hTankChapterCount.Clear();
     for (int client = 1; client <= MaxClients; client++)
     {
-        g_bTankPriority[client] = false;
         g_bBoughtWitch[client] = false;
-        g_bBoughtTankArrival[client] = false;
+        g_bTankControl[client] = false;
+        g_iTankSurvivorBot[client] = 0;
         g_bTankRecent[client] = false;
     }
 }
