@@ -22,7 +22,7 @@ try: print(r.command(sys.argv[1]),end="")
 finally: r.__exit__()' "$*"; }
 read_release_password(){ local password="${L4D2_RELEASE_ZIP_PASSWORD:-}"; if [[ -z "$password" && -r "$RELEASE_PASSWORD_FILE" ]]; then password="$(<"$RELEASE_PASSWORD_FILE")"; fi; if [[ -z "$password" ]]; then [[ -r /dev/tty ]] || die '当前不是交互终端；请设置 L4D2_RELEASE_ZIP_PASSWORD 或创建 /etc/l4d2/release_password 后重试。'; printf '请输入发布包 ZIP 解压密码： ' >/dev/tty; IFS= read -r -s password </dev/tty || die '无法读取 ZIP 解压密码'; printf '\n' >/dev/tty; fi; [[ "$password" =~ ^[A-Za-z0-9]{8,128}$ ]] || die 'ZIP 解压密码必须为8-128位字母或数字'; printf '%s' "$password"; }
 update_from_release() (
-  local url="${L4D2_RELEASE_ARCHIVE_URL:-http://66.45.226.118:27816/l4d2-cn77-release.zip}" sha="${L4D2_RELEASE_ARCHIVE_SHA256:-}" sha_url="${L4D2_RELEASE_ARCHIVE_SHA256_URL:-}" tmp='' archive source zip_password
+  local url="${L4D2_RELEASE_ARCHIVE_URL:-http://38.147.191.100/l4d2-cn77-release.zip}" sha="${L4D2_RELEASE_ARCHIVE_SHA256:-}" sha_url="${L4D2_RELEASE_ARCHIVE_SHA256_URL:-}" tmp='' archive source zip_password
   local archive_name partial partial_sha
   cleanup_release_tmp(){
     local status=$?
@@ -33,7 +33,7 @@ update_from_release() (
   }
   trap cleanup_release_tmp EXIT
   [[ -n "$url" ]] || die '更新需要 L4D2_RELEASE_ARCHIVE_URL；更新不从运行目录执行版本控制操作'
-  [[ "$url" == https://* || "$url" == http://66.45.226.118:27816/* ]] || die '发布归档 URL 必须使用 HTTPS，或使用受信任的 66 发布地址'
+  [[ "$url" == https://* || "$url" == http://66.45.226.118:27816/* || "$url" == http://38.147.191.100/* ]] || die '发布归档 URL 必须使用 HTTPS，或使用受信任的 66 发布地址/38 中转地址'
   if [[ -z "$sha" ]]; then
     [[ -n "$sha_url" ]] || sha_url="${url}.sha256"
     sha="$(curl -fsL --retry 3 --retry-delay 1 --connect-timeout 20 "$sha_url" | awk 'NF && $1 !~ /^#/ {print $1; exit}')"
