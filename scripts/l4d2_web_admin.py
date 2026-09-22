@@ -38,6 +38,8 @@ USERID_RE = re.compile(r"^\d{1,5}$")
 MOTD_FILE = "/opt/l4d2/server/left4dead2/motd.txt"
 HELP_FILE = "/opt/l4d2/server/left4dead2/cfg/sourcemod/l4d2_pve_help_menu_content.txt"
 WELCOME_FILE = "/opt/l4d2/server/left4dead2/cfg/sourcemod/l4d2_pve_welcome.txt"
+HELP_KV_FILE = "/opt/l4d2/server/left4dead2/addons/sourcemod/configs/pve_help_content.cfg"
+INFECTED_BOTS_FILE = "/opt/l4d2/server/left4dead2/addons/sourcemod/data/l4dinfectedbots/pve_pvpve.cfg"
 
 CONTROL_SPECS = {
     "start": 0,
@@ -276,12 +278,64 @@ def cvar_quote(value: str) -> str:
 
 
 def parse_cvar(value: str) -> str:
-    line = value.strip().splitlines()[-1] if value.strip() else ""
-    if "=" in line:
-        line = line.split("=", 1)[1].strip()
-    if len(line) >= 2 and line[0] == line[-1] == '"':
-        line = line[1:-1]
-    return line
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if not line or line.lower().startswith("unknown command"):
+            continue
+        if "=" in line:
+            line = line.split("=", 1)[1].strip()
+            quoted = re.match(r'^"((?:\\.|[^"\\])*)"', line)
+            if quoted:
+                return re.sub(r'\\(["\\])', r'\1', quoted.group(1)).strip()
+        elif line.lower().startswith(("game ", "flags ", "default ", "description ", "min ", "max ")):
+            continue
+        if len(line) >= 2 and line[0] == line[-1] == '"':
+            line = line[1:-1]
+        return line.strip()
+    return ""
+
+
+def strip_chat_color_escapes(value: str) -> str:
+    value = re.sub(r"\\x[0-9a-fA-F]{2}", "", value)
+    return re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", value)
+
+
+def read_help_kv_fallback() -> Tuple[str, str]:
+    raw = read_text_file(HELP_KV_FILE, 32768)
+    if not raw:
+        return "", ""
+
+    announcement_match = re.search(r'^\s*"announcement"\s+"((?:\\.|[^"])*)"', raw, re.MULTILINE)
+    announcement = strip_chat_color_escapes(announcement_match.group(1)) if announcement_match else ""
+    details_match = re.search(r'"details"\s*\{(?P<body>.*?)^\s*\}', raw, re.MULTILINE | re.DOTALL)
+    details: List[str] = []
+    if details_match:
+        details = [
+            strip_chat_color_escapes(match.group(1))
+            for match in re.finditer(r'^\s*"\d+"\s+"((?:\\.|[^"])*)"', details_match.group("body"), re.MULTILINE)
+        ]
+    return "\n".join(line for line in details if line), announcement
+
+
+def read_player_content() -> Dict[str, str]:
+    help_text = strip_chat_color_escapes(read_text_file(HELP_FILE, 16384))
+    welcome = strip_chat_color_escapes(read_text_file(WELCOME_FILE, 4096))
+    fallback_help, fallback_welcome = read_help_kv_fallback()
+    if not help_text:
+        help_text = fallback_help
+    if not welcome:
+        welcome = fallback_welcome
+    return {
+        "motd": read_text_file(MOTD_FILE, 32768),
+        "help": help_text,
+        "welcome": welcome,
+    }
+
+
+def read_infected_bots_max_specials(default: int = 12) -> str:
+    raw = read_text_file(INFECTED_BOTS_FILE, 32768)
+    match = re.search(r'^\s*"max_specials"\s+"(\d+)"', raw, re.MULTILINE)
+    return match.group(1) if match else str(default)
 
 
 def parse_status(output: str) -> List[Dict[str, str]]:
@@ -314,8 +368,8 @@ def valid_hostname(value: str) -> bool:
 
 def fixed_cvars(config: Settings) -> Dict[str, str]:
     names = (
-                    "hostname", "sv_visiblemaxplayers", "sv_maxplayers", "z_difficulty", "z_max_player_zombies",
-        "director_special_battlefield_respawn_interval", "z_common_limit",
+        "hostname", "sv_visiblemaxplayers", "sv_maxplayers", "z_difficulty",
+        "director_special_respawn_interval", "z_common_limit",
     )
     result: Dict[str, str] = {}
     with Rcon(config.rcon_host, config.rcon_port, config.rcon_password) as rcon:
@@ -334,21 +388,18 @@ class Panel:
         data: Dict[str, object] = {
             "service": service if active else f"inactive ({service})",
             "players": [], "cvars": {}, "errors": [],
-            "content": {
-                "motd": read_text_file(MOTD_FILE, 32768),
-                "help": read_text_file(HELP_FILE, 16384),
-                "welcome": read_text_file(WELCOME_FILE, 4096),
-            },
+            "content": read_player_content(),
         }
         try:
             with Rcon(self.config.rcon_host, self.config.rcon_port, self.config.rcon_password) as rcon:
                 data["players"] = parse_status(rcon.command("status"))
                 cvars: Dict[str, str] = {}
                 for name in (
-                    "hostname", "sv_visiblemaxplayers", "sv_maxplayers", "z_difficulty", "z_max_player_zombies",
-                    "director_special_battlefield_respawn_interval", "z_common_limit",
+                    "hostname", "sv_visiblemaxplayers", "sv_maxplayers", "z_difficulty",
+                    "director_special_respawn_interval", "z_common_limit",
                 ):
                     cvars[name] = parse_cvar(rcon.command(name))
+                cvars["max_specials"] = read_infected_bots_max_specials()
                 data["cvars"] = cvars
         except (OSError, RconError, socket.timeout) as exc:
             data["errors"] = [str(exc)]
@@ -533,6 +584,11 @@ def handle_post(panel: Panel, path: str, values: Dict[str, str]) -> str:
             ok, output = control_run(panel.config, command, args)
             if not ok:
                 raise ValueError(f"{command} 失败：{output}")
+        current = fixed_cvars(panel.config)
+        if current.get("director_special_respawn_interval") != f"{interval_value:g}":
+            raise ValueError("SI 波次间隔写入后回读不一致")
+        if current.get("z_common_limit") != str(common_value):
+            raise ValueError("普通感染者数量写入后回读不一致")
         return "大厅名、人数、难度、SI 数量、SI 波次间隔和普通感染者数量已更新"
 
     if path == "/kick":
@@ -679,8 +735,8 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:8px;border-bottom:1px
 <div>难度：<strong>{html.escape(difficulty)}</strong></div>
 <div>在线人数：<strong>{len(players)}</strong></div>
 <div>人数上限：<strong>{slots}</strong></div>
-<div>SI 数量：<strong>{html.escape(str(cvars.get('z_max_player_zombies', '未知')))}</strong></div>
-<div>SI 波次间隔：<strong>{html.escape(str(cvars.get('director_special_battlefield_respawn_interval', '未知')))} 秒</strong></div>
+<div>SI 数量：<strong>{html.escape(str(cvars.get('max_specials', '未知')))}</strong></div>
+<div>SI 波次间隔：<strong>{html.escape(str(cvars.get('director_special_respawn_interval', '未知')))} 秒</strong></div>
 <div>普通感染者数量：<strong>{html.escape(str(cvars.get('z_common_limit', '未知')))}</strong></div></div></section>
 <section><h2>服务控制</h2><div class='grid'>
 <form method='post' action='/action'><input type='hidden' name='csrf' value='{csrf}'><button name='action' value='start'>启动</button></form>
@@ -692,8 +748,8 @@ table{{width:100%;border-collapse:collapse}}th,td{{padding:8px;border-bottom:1px
 <label>大厅名<input name='hostname' maxlength='64' required value='{html.escape(str(cvars.get('hostname', '')), quote=True)}'></label>
 <label>难度<select name='difficulty'>{difficulty_options}</select></label>
 <label>人数上限<input name='slots' type='number' min='1' max='31' required value='{slots}'></label>
-<label>SI 数量<input name='si_limit' type='number' min='1' max='31' required value='{html.escape(str(cvars.get('z_max_player_zombies', '12')), quote=True)}'></label>
-<label>SI 波次间隔（秒）<input name='si_interval' type='number' min='1' max='180' step='0.1' required value='{html.escape(str(cvars.get('director_special_battlefield_respawn_interval', '30')), quote=True)}'></label>
+<label>SI 数量<input name='si_limit' type='number' min='1' max='31' required value='{html.escape(str(cvars.get('max_specials', '12')), quote=True)}'></label>
+<label>SI 波次间隔（秒）<input name='si_interval' type='number' min='1' max='180' step='0.1' required value='{html.escape(str(cvars.get('director_special_respawn_interval', '30')), quote=True)}'></label>
 <label>普通感染者数量<input name='common_limit' type='number' min='0' max='300' required value='{html.escape(str(cvars.get('z_common_limit', '30')), quote=True)}'></label></div><p><button>保存战斗设置</button></p></form></section>
 <section><h2>在线玩家（{len(players)}）</h2><div style='overflow-x:auto'><table><tr><th>编号</th><th>名称</th><th>SteamID</th><th>Ping</th><th>状态</th><th>操作</th></tr>{''.join(rows)}</table></div>
 <div class='grid'><form method='post' action='/points'><input type='hidden' name='csrf' value='{csrf}'><label>玩家编号<select name='userid' required>{options}</select></label><label>积分增减<input name='amount' type='number' min='-9999999' max='9999999' value='100' required></label><p><button>修改积分</button></p></form>

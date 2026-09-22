@@ -1,0 +1,12 @@
+[Unit]
+Description=Periodic L4D2 SteamCMD update check
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=6h
+RandomizedDelaySec=30min
+Persistent=true
+Unit=l4d2-steam-update.service
+
+[Install]
+WantedBy=timers.target

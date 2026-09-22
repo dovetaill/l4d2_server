@@ -32,6 +32,7 @@ server/left4dead2/addons/sourcemod/configs/*
 !server/left4dead2/addons/sourcemod/configs/admins_simple.ini
 !server/left4dead2/addons/sourcemod/configs/adminmenu_custom.txt
 !server/left4dead2/addons/sourcemod/configs/pve_help_content.cfg
+!server/left4dead2/addons/sourcemod/configs/pve_hostname.txt
 
 # Custom compiled plugins. Third-party installed binaries remain runtime-only.
 server/left4dead2/addons/sourcemod/plugins/*
@@ -52,8 +53,11 @@ server/left4dead2/addons/sourcemod/plugins/*
 # Custom SourcePawn sources and the one reviewed third-party source.
 server/left4dead2/addons/sourcemod/scripting/*
 !server/left4dead2/addons/sourcemod/scripting/l4d2_campaign_shop.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_automatic_weapons.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_unicode_hostname.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_clear_thirdstrike.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_combat_rewards.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_incap_support.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_end_safearea_teleport.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_help_menu.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp
@@ -67,17 +71,22 @@ server/left4dead2/addons/sourcemod/scripting/*
 
 server/left4dead2/addons/sourcemod/scripting/include/*
 !server/left4dead2/addons/sourcemod/scripting/include/l4d2_campaign_shop.inc
+!server/left4dead2/addons/sourcemod/scripting/include/miuwiki_autoscar.inc
 !server/left4dead2/addons/sourcemod/scripting/include/l4d2_playable_witch.inc
 !server/left4dead2/addons/sourcemod/scripting/include/l4d2_pve_mutant_tanks.inc
 
 server/left4dead2/addons/sourcemod/scripting/third_party/*
+!server/left4dead2/addons/sourcemod/scripting/third_party/dual_primaries.sp
 !server/left4dead2/addons/sourcemod/scripting/third_party/l4d2_double_jump.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/miuwiki_autoscar.sp
 !server/left4dead2/addons/sourcemod/scripting/third_party/command_buffer.sp
 
 # Reviewed upstream gamedata for the command buffer fixer.
 !server/left4dead2/addons/sourcemod/gamedata/
 server/left4dead2/addons/sourcemod/gamedata/*
 !server/left4dead2/addons/sourcemod/gamedata/command_buffer.games.txt
+!server/left4dead2/addons/sourcemod/gamedata/miuwiki_autoscar.txt
+!server/left4dead2/addons/sourcemod/gamedata/l4d2_automatic_weapons.txt
 
 # Server configuration maintained by this project.
 server/left4dead2/cfg/*
@@ -89,6 +98,9 @@ server/left4dead2/cfg/*
 
 server/left4dead2/cfg/sourcemod/*
 !server/left4dead2/cfg/sourcemod/l4d2_campaign_shop.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_automatic_weapons.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_unicode_hostname.cfg
+!server/left4dead2/cfg/sourcemod/miuwiki_autoscar.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_clear_thirdstrike.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_combat_rewards.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_end_safearea_teleport.cfg

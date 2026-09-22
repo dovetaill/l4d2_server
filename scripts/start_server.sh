@@ -9,11 +9,9 @@ PORT="${PORT:-27015}"
 MAP="${MAP:-c1m1_hotel}"
 TICKRATE="${TICKRATE:-30}"
 
-EXTRA_ARGS=()
-
-if [[ -n "${GSLT:-}" ]]; then
-    EXTRA_ARGS+=(+sv_setsteamaccount "$GSLT")
-fi
+# This L4D2 dedicated-server build does not expose sv_setsteamaccount.
+# Keep GSLT in /etc/l4d2/l4d2.env for reference, but do not pass the
+# unsupported command because it only produces a misleading startup error.
 
 cd "$SERVER_DIR"
 
@@ -25,5 +23,4 @@ exec ./srcds_run \
     -tickrate "$TICKRATE" \
     -maxplayers 31 \
     +sv_setmax 31 \
-    "${EXTRA_ARGS[@]}" \
     +map "$MAP"

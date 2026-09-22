@@ -1,0 +1,8 @@
+[Unit]
+Description=Update L4D2 Dedicated Server through SteamCMD
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/l4d2/scripts/update_steamcmd.sh

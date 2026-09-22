@@ -18,6 +18,9 @@ public Plugin myinfo =
 ConVar g_cvEnabled;
 ConVar g_cvWelcome;
 ConVar g_cvWelcomeDelay;
+ConVar g_cvAnnounceInterval;
+Handle g_hAnnouncementTimer;
+int g_iAnnouncementIndex;
 
 char g_sHelpTitle[HELP_TEXT_LENGTH];
 char g_sAnnouncement[HELP_TEXT_LENGTH];
@@ -29,6 +32,7 @@ public void OnPluginStart()
     g_cvEnabled = CreateConVar("l4d2_pve_help_enable", "1", "Enable the player Chinese PvE help menu.", _, true, 0.0, true, 1.0);
     g_cvWelcome = CreateConVar("l4d2_pve_help_welcome", "1", "Show the help menu hint once when a player joins.", _, true, 0.0, true, 1.0);
     g_cvWelcomeDelay = CreateConVar("l4d2_pve_help_welcome_delay", "8.0", "Seconds after joining before the help hint is shown.", _, true, 0.0, true, 60.0);
+    g_cvAnnounceInterval = CreateConVar("l4d2_pve_help_announce_interval", "120.0", "Seconds between player-visible Chinese help announcements.", _, true, 30.0, true, 600.0);
 
     RegConsoleCmd("sm_pvehelp", Command_HelpMenu, "打开中文 PvE 开始菜单");
     RegConsoleCmd("sm_menu", Command_HelpMenu, "打开中文 PvE 开始菜单");
@@ -43,6 +47,16 @@ public void OnPluginStart()
 public void OnConfigsExecuted()
 {
     LoadHelpContent();
+    RestartAnnouncementTimer();
+}
+
+public void OnPluginEnd()
+{
+    if (g_hAnnouncementTimer != null)
+    {
+        delete g_hAnnouncementTimer;
+        g_hAnnouncementTimer = null;
+    }
 }
 
 public void OnClientPutInServer(int client)
@@ -63,6 +77,40 @@ public Action Timer_Welcome(Handle timer, int userid)
 
     PrintToChat(client, "%s", g_sAnnouncement);
     return Plugin_Stop;
+}
+
+void RestartAnnouncementTimer()
+{
+    if (g_hAnnouncementTimer != null)
+    {
+        delete g_hAnnouncementTimer;
+        g_hAnnouncementTimer = null;
+    }
+    g_iAnnouncementIndex = 0;
+    if (g_cvEnabled.BoolValue && g_cvAnnounceInterval.FloatValue > 0.0)
+    {
+        g_hAnnouncementTimer = CreateTimer(g_cvAnnounceInterval.FloatValue, Timer_AnnounceHelp, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+    }
+}
+
+public Action Timer_AnnounceHelp(Handle timer)
+{
+    if (!g_cvEnabled.BoolValue)
+    {
+        return Plugin_Continue;
+    }
+    PrintToChatAll("%s", g_sAnnouncement);
+    for (int i = 0; i < MAX_HELP_LINES; i++)
+    {
+        int index = (g_iAnnouncementIndex + i) % MAX_HELP_LINES;
+        if (g_sDetails[index][0] != '\0')
+        {
+            PrintToChatAll("[玩法提示] %s", g_sDetails[index]);
+            g_iAnnouncementIndex = (index + 1) % MAX_HELP_LINES;
+            break;
+        }
+    }
+    return Plugin_Continue;
 }
 
 public Action Command_ReloadHelp(int client, int args)
@@ -209,6 +257,7 @@ void LoadHelpContent()
     kv.GetString("announcement", value, sizeof(value), "");
     if (value[0] != '\0')
     {
+        NormalizeChatText(value, sizeof(value));
         strcopy(g_sAnnouncement, sizeof(g_sAnnouncement), value);
     }
 
@@ -239,15 +288,27 @@ void LoadLines(KeyValues kv, char lines[MAX_HELP_LINES][HELP_TEXT_LENGTH])
         kv.GetString(key, value, sizeof(value), "");
         if (value[0] != '\0')
         {
+            NormalizeChatText(value, sizeof(value));
             strcopy(lines[i], HELP_TEXT_LENGTH, value);
         }
     }
 }
 
+void NormalizeChatText(char[] value, int maxlen)
+{
+    ReplaceString(value, maxlen, "\\x01", "", false);
+    ReplaceString(value, maxlen, "\\x02", "", false);
+    ReplaceString(value, maxlen, "\\x03", "", false);
+    ReplaceString(value, maxlen, "\\x04", "", false);
+    ReplaceString(value, maxlen, "\\x05", "", false);
+    ReplaceString(value, maxlen, "\\x06", "", false);
+    ReplaceString(value, maxlen, "\\x07", "", false);
+}
+
 void SetDefaultHelpContent()
 {
     strcopy(g_sHelpTitle, sizeof(g_sHelpTitle), "无限火力 PvPvE 开始菜单");
-    strcopy(g_sAnnouncement, sizeof(g_sAnnouncement), "\x04[开始菜单]\x01 输入 \x03!菜单\x01 或 \x03!pvehelp\x01 打开中文帮助；按 H 可查看服务器帮助页。");
+    strcopy(g_sAnnouncement, sizeof(g_sAnnouncement), "[开始菜单] 输入 !菜单 或 !pvehelp 打开中文帮助；按 H 可查看服务器帮助页。");
 
     for (int i = 0; i < MAX_HELP_LINES; i++)
     {
@@ -258,9 +319,11 @@ void SetDefaultHelpContent()
     strcopy(g_sDetails[0], HELP_TEXT_LENGTH, "本服：无限火力战役 PvPvE");
     strcopy(g_sDetails[1], HELP_TEXT_LENGTH, "幸存者推进地图，感染者可由真人加入");
     strcopy(g_sDetails[2], HELP_TEXT_LENGTH, "H：默认打开服务器中文帮助页");
-    strcopy(g_sDetails[3], HELP_TEXT_LENGTH, "Shift + Reload：切换普通/燃烧/爆炸升级弹");
-    strcopy(g_sDetails[4], HELP_TEXT_LENGTH, "燃烧/爆炸升级弹：拾取后特殊弹药持续补充");
-    strcopy(g_sDetails[5], HELP_TEXT_LENGTH, "积分只在当前战役有效，不是永久等级");
+    strcopy(g_sDetails[3], HELP_TEXT_LENGTH, "Shift + Reload：有第二把主武器时切换武器，否则切换升级弹");
+    strcopy(g_sDetails[4], HELP_TEXT_LENGTH, "燃烧/爆炸升级包：特殊弹药和当前弹匣不消耗");
+    strcopy(g_sDetails[5], HELP_TEXT_LENGTH, "商城单独购买升级弹：数量有限，特感击杀随机返还 1-20 发");
+    strcopy(g_sDetails[6], HELP_TEXT_LENGTH, "击杀普通感染者不增加积分");
+    strcopy(g_sDetails[7], HELP_TEXT_LENGTH, "特感击杀只增加 1 点生命值，生命值不设上限");
 
     strcopy(g_sCommands[0], HELP_TEXT_LENGTH, "!菜单 / !pvehelp：打开开始菜单");
     strcopy(g_sCommands[1], HELP_TEXT_LENGTH, "!buy / !shop：打开商城");

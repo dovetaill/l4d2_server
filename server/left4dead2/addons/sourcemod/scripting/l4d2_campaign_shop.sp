@@ -49,14 +49,13 @@ ConVar g_hAdminPoints;
 ConVar g_hDirectAmmoMultiplier;
 ConVar g_hDirectAmmoMax;
 ConVar g_hDirectAmmoKillReward;
-ConVar g_hDirectAmmoRewardLimit;
+ConVar g_hDirectAmmoKillMax;
 ConVar g_hItemPrices[MAX_SHOP_ITEMS];
 
 int g_iPoints[MAXPLAYERS + 1];
 int g_iCommonKills[MAXPLAYERS + 1];
 int g_iLimitedAmmoWeapon[MAXPLAYERS + 1];
 int g_iLimitedAmmoRemaining[MAXPLAYERS + 1];
-int g_iLimitedAmmoRewardPoints[MAXPLAYERS + 1];
 bool g_bLimitedAmmoShot[MAXPLAYERS + 1];
 char g_sCampaign[64];
 
@@ -224,8 +223,8 @@ char g_sItemClasses[MAX_SHOP_ITEMS][64] =
 int g_iDefaultPrices[MAX_SHOP_ITEMS] =
 {
     15, 18, 25, 25, 30, 50, 70, 350, 450, 50, 45, 60,
-    18, 28, 30, 35, 38, 35, 38, 45, 50, 40, 45, 50,
-    52, 38, 48, 45, 52, 110, 135, 32, 38, 35, 30, 30,
+    18, 28, 30, 35, 38, 35, 38, 45, 50, 40, 45, 350,
+    260, 38, 48, 45, 1040, 550, 675, 32, 38, 35, 30, 30,
     30, 90, 30, 36, 30, 38, 32, 35, 35, 90, 40, 25, 35
 };
 
@@ -277,7 +276,7 @@ public void OnPluginStart()
     g_hMaxPoints = CreateConVar("l4d2_campaign_shop_max_points", "250", "单名玩家在一场战役中可持有的最大积分。", _, true, 0.0);
     g_hNotify = CreateConVar("l4d2_campaign_shop_notify", "1", "在聊天中显示积分奖励提示。", _, true, 0.0, true, 1.0);
     g_hCommonInterval = CreateConVar("l4d2_campaign_shop_common_interval", "20", "获得一次普通感染者奖励所需的击杀数。", _, true, 1.0);
-    g_hCommonReward = CreateConVar("l4d2_campaign_shop_common_reward", "4", "每个普通感染者奖励阶段给予的积分。", _, true, 0.0);
+    g_hCommonReward = CreateConVar("l4d2_campaign_shop_common_reward", "0", "每个普通感染者奖励阶段给予的积分。", _, true, 0.0);
     g_hSpecialReward = CreateConVar("l4d2_campaign_shop_special_reward", "1", "击杀特殊感染者给予的积分。", _, true, 0.0);
     g_hWitchReward = CreateConVar("l4d2_campaign_shop_witch_reward", "2", "击杀女巫给予的积分。", _, true, 0.0);
     g_hTankReward = CreateConVar("l4d2_campaign_shop_tank_reward", "3", "击杀坦克给予的积分。", _, true, 0.0);
@@ -289,8 +288,8 @@ public void OnPluginStart()
     g_hAdminPoints = CreateConVar("l4d2_campaign_shop_admin_points", "9999999", "为指定管理员自动发放的战役积分。", _, true, 0.0);
     g_hDirectAmmoMultiplier = CreateConVar("l4d2_campaign_shop_direct_ammo_multiplier", "5.0", "直接购买燃烧弹或高爆弹时，特殊弹药为弹匣容量的倍数。", _, true, 1.0, true, 20.0);
     g_hDirectAmmoMax = CreateConVar("l4d2_campaign_shop_direct_ammo_max", "250", "直接购买燃烧弹或高爆弹时的最大特殊弹药数。", _, true, 1.0, true, 999.0);
-    g_hDirectAmmoKillReward = CreateConVar("l4d2_campaign_shop_direct_ammo_kill_reward", "1", "使用商城有限燃烧弹或高爆弹击杀目标时给予的积分。", _, true, 0.0);
-    g_hDirectAmmoRewardLimit = CreateConVar("l4d2_campaign_shop_direct_ammo_reward_limit", "100", "每名玩家每个战役通过商城有限升级弹击杀最多获得的积分。", _, true, 0.0);
+    g_hDirectAmmoKillReward = CreateConVar("l4d2_campaign_shop_direct_ammo_kill_reward", "1", "每次特感击杀返还的最少有限升级弹数量。", _, true, 0.0);
+    g_hDirectAmmoKillMax = CreateConVar("l4d2_campaign_shop_direct_ammo_kill_max", "20", "每次特感击杀返还的最多有限升级弹数量。", _, true, 1.0, true, 20.0);
 
     char priceCvar[64], priceDefault[16], priceDescription[128];
     for (int i = 0; i < MAX_SHOP_ITEMS; i++)
@@ -619,7 +618,6 @@ void ResetLimitedAmmoState(int client)
 {
     g_iLimitedAmmoWeapon[client] = -1;
     g_iLimitedAmmoRemaining[client] = 0;
-    g_iLimitedAmmoRewardPoints[client] = 0;
     g_bLimitedAmmoShot[client] = false;
 }
 
@@ -667,22 +665,33 @@ void AwardLimitedAmmoKill(int client)
     }
 
     g_bLimitedAmmoShot[client] = false;
-
-    int reward = g_hDirectAmmoKillReward.IntValue;
-    int limit = g_hDirectAmmoRewardLimit.IntValue;
-    if (reward <= 0 || limit <= 0 || g_iLimitedAmmoRewardPoints[client] >= limit || g_iPoints[client] >= GetPointCap(client))
+    int minimum = g_hDirectAmmoKillReward.IntValue;
+    int maximum = g_hDirectAmmoKillMax.IntValue;
+    if (minimum <= 0 || maximum < minimum)
     {
         return;
     }
 
-    int remaining = limit - g_iLimitedAmmoRewardPoints[client];
-    if (reward > remaining)
+    int weapon = g_iLimitedAmmoWeapon[client];
+    if (weapon <= MaxClients || !IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded"))
     {
-        reward = remaining;
+        return;
     }
 
-    AddPoints(client, reward, "有限升级弹击杀");
-    g_iLimitedAmmoRewardPoints[client] += reward;
+    int reward = GetRandomInt(minimum, maximum);
+    int current = GetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded");
+    int upgraded = current + reward;
+    if (upgraded > g_hDirectAmmoMax.IntValue)
+    {
+        upgraded = g_hDirectAmmoMax.IntValue;
+    }
+    SetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", upgraded);
+    g_iLimitedAmmoRemaining[client] += reward;
+    if (g_iLimitedAmmoRemaining[client] > g_hDirectAmmoMax.IntValue)
+    {
+        g_iLimitedAmmoRemaining[client] = g_hDirectAmmoMax.IntValue;
+    }
+    PrintToChat(client, "\x04[弹药]\x01 特感击杀返还 %d 发有限升级弹。", reward);
 }
 
 public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast)
@@ -709,21 +718,7 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
 
 public void Event_InfectedDeath(Event event, const char[] name, bool dontBroadcast)
 {
-    int attacker = ResolveEventClient(event, "attacker");
-    if (!IsRealSurvivor(attacker))
-    {
-        return;
-    }
-
-    AwardLimitedAmmoKill(attacker);
-
-    g_iCommonKills[attacker]++;
-    int interval = g_hCommonInterval.IntValue;
-    if (g_iCommonKills[attacker] >= interval)
-    {
-        g_iCommonKills[attacker] -= interval;
-        AddPoints(attacker, g_hCommonReward.IntValue, "普通感染者奖励");
-    }
+    // Common infected kills intentionally grant neither points nor upgrade ammo.
 }
 
 public void Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
@@ -861,7 +856,6 @@ void ResetPoints()
     {
         g_iPoints[i] = 0;
         g_iCommonKills[i] = 0;
-        g_iLimitedAmmoRewardPoints[i] = 0;
         g_bLimitedAmmoShot[i] = false;
     }
     ApplyAdminPointsToConnected();

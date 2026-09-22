@@ -306,13 +306,18 @@ bool BeginControl(int client, PlayableWitchSource source)
         return false;
     }
 
-    if ((source == PlayableWitchSource_Purchase || source == PlayableWitchSource_Random)
-        && (GetClientTeam(client) != TEAM_INFECTED || !IsGhost(client)))
+    int team = GetClientTeam(client);
+    if (source == PlayableWitchSource_Purchase
+        && (team != TEAM_INFECTED || (!IsGhost(client) && !IsPlayerAlive(client))))
+    {
+        return false;
+    }
+    if (source == PlayableWitchSource_Random
+        && (team != TEAM_INFECTED || !IsGhost(client)))
     {
         return false;
     }
 
-    int team = GetClientTeam(client);
     if (team == TEAM_SURVIVOR && GetFeatureStatus(FeatureType_Native, "L4D_ReplaceWithBot") != FeatureStatus_Available)
     {
         return false;

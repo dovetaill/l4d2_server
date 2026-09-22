@@ -1,0 +1,26 @@
+"Games"
+{
+    "left4dead2"
+    {
+        "Functions"
+        {
+            "CTerrorGun::GetRateOfFire"
+            {
+                "signature" "CTerrorGun::GetRateOfFire"
+                "callconv" "thiscall"
+                "return" "float"
+                "this" "entity"
+            }
+        }
+        "Signatures"
+        {
+            "CTerrorGun::GetRateOfFire"
+            {
+                "library" "server"
+                "linux" "@_ZNK10CTerrorGun13GetRateOfFireEv"
+                "mac" "@_ZNK10CTerrorGun13GetRateOfFireEv"
+                "windows" "\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x2A\x85\x2A\x74\x2A\x8B\x2A\x8B\x2A\x8B\x82\x2A\x2A\x2A\x2A\xFF\x2A\x84\x2A\x74\x2A\x8B\x0D\x2A\x2A\x2A\x2A\xD9"
+            }
+        }
+    }
+}

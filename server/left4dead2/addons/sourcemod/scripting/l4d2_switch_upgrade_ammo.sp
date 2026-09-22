@@ -3,6 +3,7 @@
 
 #include <sourcemod>
 #include <sdktools>
+#include <dual_primaries>
 
 #define TEAM_SURVIVOR 2
 #define UPGRADE_INCENDIARY (1 << 0)
@@ -27,10 +28,13 @@ Handle g_hUpgradeAmmoTimer;
 bool g_bCooldown[MAXPLAYERS + 1];
 ArrayList g_hLimitedWeapons;
 ArrayList g_hInfiniteWeapons;
+ArrayList g_hInfiniteClipSizes;
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int errMax)
 {
     RegPluginLibrary("l4d2_switch_upgrade_ammo");
+    MarkNativeAsOptional("L4D2DualPrimaries_HasAlternate");
+    MarkNativeAsOptional("L4D2DualPrimaries_Switch");
     CreateNative("L4D2SwitchAmmo_MarkLimited", Native_MarkLimited);
     return APLRes_Success;
 }
@@ -39,6 +43,7 @@ public void OnPluginStart()
 {
     g_hLimitedWeapons = new ArrayList();
     g_hInfiniteWeapons = new ArrayList();
+    g_hInfiniteClipSizes = new ArrayList(2);
     g_hEnable = CreateConVar("l4d2_switch_ammo_enable", "1", "Enable Shift+Reload upgrade ammo switching.", _, true, 0.0, true, 1.0);
     g_hInfinite = CreateConVar("l4d2_switch_ammo_infinite_load", "1", "Keep a large upgraded-ammo counter when switching.", _, true, 0.0, true, 1.0);
     g_hInfiniteUpgradeEnable = CreateConVar("l4d2_switch_ammo_infinite_upgrade_enable", "1", "Keep picked-up incendiary and explosive ammo replenished.", _, true, 0.0, true, 1.0);
@@ -54,6 +59,7 @@ public void OnMapStart()
 {
     g_hLimitedWeapons.Clear();
     g_hInfiniteWeapons.Clear();
+    g_hInfiniteClipSizes.Clear();
 }
 
 public void OnConfigsExecuted()
@@ -64,6 +70,9 @@ public void OnConfigsExecuted()
 public void OnPluginEnd()
 {
     StopUpgradeAmmoTimer();
+    delete g_hLimitedWeapons;
+    delete g_hInfiniteWeapons;
+    delete g_hInfiniteClipSizes;
 }
 
 public void OnClientDisconnect(int client)
@@ -80,6 +89,15 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     if (!(buttons & IN_RELOAD) || !(buttons & IN_SPEED))
     {
         return Plugin_Continue;
+    }
+
+    if (GetFeatureStatus(FeatureType_Native, "L4D2DualPrimaries_HasAlternate") == FeatureStatus_Available
+        && L4D2DualPrimaries_HasAlternate(client))
+    {
+        L4D2DualPrimaries_Switch(client);
+        buttons &= ~(IN_RELOAD | IN_SPEED);
+        StartClientCooldown(client);
+        return Plugin_Changed;
     }
 
     int active = GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon");
@@ -246,6 +264,18 @@ void RefillUpgradeAmmoInSlot(int client, int slot, int amount)
     }
 
     TrackWeapon(g_hInfiniteWeapons, weapon);
+    if (HasEntProp(weapon, Prop_Send, "m_iClip1"))
+    {
+        int rememberedClip = GetRememberedInfiniteClip(weapon);
+        if (rememberedClip < 0)
+        {
+            RememberInfiniteClip(weapon);
+        }
+        else if (GetEntProp(weapon, Prop_Send, "m_iClip1") != rememberedClip)
+        {
+            SetEntProp(weapon, Prop_Send, "m_iClip1", rememberedClip);
+        }
+    }
     if (GetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded") != amount)
     {
         SetEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded", amount);
@@ -261,8 +291,59 @@ public any Native_MarkLimited(Handle plugin, int numParams)
     }
 
     RemoveTrackedWeapon(g_hInfiniteWeapons, weapon);
+    RemoveInfiniteClip(weapon);
     TrackWeapon(g_hLimitedWeapons, weapon);
     return true;
+}
+
+void RememberInfiniteClip(int weapon)
+{
+    if (weapon <= MaxClients || !IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Send, "m_iClip1"))
+    {
+        return;
+    }
+    PruneInfiniteClipSizes();
+    int ref = EntIndexToEntRef(weapon);
+    int index = g_hInfiniteClipSizes.FindValue(ref);
+    int clip = GetEntProp(weapon, Prop_Send, "m_iClip1");
+    if (index == -1)
+    {
+        int values[2];
+        values[0] = ref;
+        values[1] = clip;
+        g_hInfiniteClipSizes.PushArray(values);
+    }
+    else
+    {
+        g_hInfiniteClipSizes.Set(index, clip, 1);
+    }
+}
+
+int GetRememberedInfiniteClip(int weapon)
+{
+    PruneInfiniteClipSizes();
+    int index = g_hInfiniteClipSizes.FindValue(EntIndexToEntRef(weapon));
+    return index == -1 ? -1 : g_hInfiniteClipSizes.Get(index, 1);
+}
+
+void RemoveInfiniteClip(int weapon)
+{
+    int index = g_hInfiniteClipSizes.FindValue(EntIndexToEntRef(weapon));
+    if (index != -1)
+    {
+        g_hInfiniteClipSizes.Erase(index);
+    }
+}
+
+void PruneInfiniteClipSizes()
+{
+    for (int i = g_hInfiniteClipSizes.Length - 1; i >= 0; i--)
+    {
+        if (EntRefToEntIndex(g_hInfiniteClipSizes.Get(i, 0)) == INVALID_ENT_REFERENCE)
+        {
+            g_hInfiniteClipSizes.Erase(i);
+        }
+    }
 }
 
 void TrackWeapon(ArrayList list, int weapon)
