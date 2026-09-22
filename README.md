@@ -2,6 +2,26 @@
 
 这是一个以官方 Campaign 流程为基础的 Left 4 Dead 2 PvPvE 服务器。它提供无限火力、双主武器、真人普通特感、Tank 抽签、完整 Mutant Tanks 类型池和可配置的真人 Witch 实体控制，不引入 RPG 等级、经验、转生或永久属性。
 
+## 自研插件
+
+当前项目维护并编译 13 个自研 SourceMod 插件。第三方插件、SourceMod 基础插件和运行依赖不在下表中，详见 [`docs/PLUGIN_MANIFEST.md`](docs/PLUGIN_MANIFEST.md)。
+
+| 标题 | 功能 | 链接（自研） |
+|---|---|---|
+| L4D2 战役商城 | 提供战役内存积分商城，可购买武器、道具和特殊能力；积分不跨战役永久保留。 | [`l4d2_campaign_shop.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_campaign_shop.sp) |
+| L4D2 Unicode Hostname | 在引擎配置解析完成后加载并应用 UTF-8 服务器名称。 | [`l4d2_unicode_hostname.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_unicode_hostname.sp) |
+| L4D2 Clear Thirdstrike | 使用药丸或肾上腺素时减少一次倒地次数，最低保持为配置的下限。 | [`l4d2_clear_thirdstrike.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_clear_thirdstrike.sp) |
+| L4D2 Combat Rewards | 提供战役内战斗回血、Second Wind、Tank 战利品和可部署机枪奖励。 | [`l4d2_combat_rewards.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_combat_rewards.sp) |
+| L4D2 Incap Support | 玩家倒地后允许受控移动，并可使用药丸或肾上腺素进行自救。 | [`l4d2_incap_support.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_incap_support.sp) |
+| L4D2 End Safearea Teleport | 章节结束时经过宽限时间，将仍存活但落后的幸存者传送到最终安全区。 | [`l4d2_end_safearea_teleport.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_end_safearea_teleport.sp) |
+| L4D2 PvE Admin | 提供 PvE 管理员菜单和命令，用于玩家、装备、积分、Witch 及 Mutant Tank 测试控制。 | [`l4d2_pve_admin.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp) |
+| L4D2 PvE Chinese Help Menu | 提供面向玩家的中文 PvE/PvPvE 开始菜单、指令帮助和欢迎提示。 | [`l4d2_pve_help_menu.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_help_menu.sp) |
+| L4D2 PvE Infected Core | 实现战役 PvPvE 队伍切换、真人普通特感、积分、Tank 抽签和 HUD 状态显示。 | [`l4d2_pve_infected_core.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_infected_core.sp) |
+| L4D2 Switch Upgrade Ammo | 支持 Shift+Reload 切换升级弹药，并按配置持续补充燃烧弹和爆炸弹。 | [`l4d2_switch_upgrade_ammo.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_switch_upgrade_ammo.sp) |
+| L4D2 PvE Damage Display | 向攻击者显示 PvE 伤害提示，并提供 Tank 伤害排行。 | [`l4d2_pve_damage_display.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_damage_display.sp) |
+| L4D2 Playable Witch | 基于真实 Witch 实体提供玩家控制、镜头、移动、攻击、跳跃和短时狂暴。 | [`l4d2_playable_witch.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_playable_witch.sp) |
+| L4D2 PvE Mutant Tank Pool | 校验 Mutant Tanks 的 146 个类型，提供加权随机池、黑白名单和章节计数。 | [`l4d2_pve_mutant_tanks.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_mutant_tanks.sp) |
+
 ## 目录与服务
 
 | 用途 | 路径 |
