@@ -97,6 +97,15 @@ if [[ -d "${ROOT_DIR}/server/left4dead2/addons/sourcemod/gamedata" ]]; then
     rsync -a "${ROOT_DIR}/server/left4dead2/addons/sourcemod/gamedata/" \
         "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/gamedata/"
 fi
+
+# Do not publish loader entries known to be incompatible with L4D2. The
+# bootstrap also enforces this after synchronization for existing installs.
+find "${PACKAGE_DIR}/server/left4dead2/addons" -type f -name 'metamod_x64.vdf' -delete 2>/dev/null || true
+if [[ -f "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/plugins/nextmap.smx" ]]; then
+    install -d "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/plugins/disabled"
+    mv -f "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/plugins/nextmap.smx" \
+        "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/plugins/disabled/nextmap.smx"
+fi
 for source in \
     l4d2_campaign_shop.sp l4d2_automatic_weapons.sp l4d2_unicode_hostname.sp \
     l4d2_clear_thirdstrike.sp l4d2_combat_rewards.sp l4d2_incap_support.sp \

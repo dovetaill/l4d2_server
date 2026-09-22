@@ -141,6 +141,7 @@ Optional first-install environment variables:
   WEB_PASSWORD   Web administrator password.
   WEB_BIND       Web listen address (default: 127.0.0.1).
   WEB_PORT       Web listen port (default: 27815).
+  BIND_IP        Game listen address (default: 0.0.0.0).
   PORT           Game port (default: 27015).
   MAP            Startup map (default: c1m1_hotel).
   TICKRATE       Server tickrate (default: 30).
@@ -314,6 +315,18 @@ set_runtime_ownership() {
     [[ ! -f "${TARGET_ROOT}/scripts/l4d2_web_admin.py" ]] || chmod 0755 "${TARGET_ROOT}/scripts/l4d2_web_admin.py"
 }
 
+
+disable_incompatible_runtime_entries() {
+    # L4D2 is a 32-bit server. A stale x64 VDF makes the engine attempt to load
+    # an ELF64 module, and Nextmap is not compatible with this game.
+    find "${GAME_DIR}/addons" -type f -name 'metamod_x64.vdf' -delete 2>/dev/null || true
+    if [[ -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" ]]; then
+        install -d "${GAME_DIR}/addons/sourcemod/plugins/disabled"
+        mv -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" \
+            "${GAME_DIR}/addons/sourcemod/plugins/disabled/nextmap.smx"
+    fi
+}
+
 install_steamcmd() {
     if [[ "${SKIP_STEAM}" == "1" ]]; then
         log "L4D2_SKIP_STEAM=1; SteamCMD/AppID 222860 installation skipped."
@@ -388,17 +401,8 @@ install_frameworks() {
         install -m 0644 "${TEMP_DIR}/dynamic_balancer/plugins/l4d2_balancer_spawn_dyn.smx" "${GAME_DIR}/addons/sourcemod/plugins/l4d2_balancer_spawn_dyn.smx"
     fi
 
-    # L4D2 is a 32-bit server. Disable only the x64 MetaMod VDF probe; keep
-    # the normal VDF, 32-bit module and the linux64 binary for other games.
-    find "${GAME_DIR}/addons" -type f -name 'metamod_x64.vdf' -delete
-
-    if [[ -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" ]]; then
-        install -d "${GAME_DIR}/addons/sourcemod/plugins/disabled"
-        mv -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" \
-            "${GAME_DIR}/addons/sourcemod/plugins/disabled/nextmap.smx"
-    fi
-
     sync_project_tree
+    disable_incompatible_runtime_entries
     set_runtime_ownership
 }
 
@@ -607,6 +611,7 @@ write_private_configuration() {
 PORT=${PORT:-27015}
 MAP=${MAP:-c1m1_hotel}
 TICKRATE=${TICKRATE:-30}
+BIND_IP=${BIND_IP:-0.0.0.0}
 GSLT=${GSLT:-}
 EOF
     fi
@@ -767,6 +772,7 @@ main() {
     set_runtime_ownership
     install_steamcmd
     install_frameworks
+    disable_incompatible_runtime_entries
     if [[ "${SKIP_FRAMEWORKS}" != "1" ]]; then
         install_gameplay_packages
     fi

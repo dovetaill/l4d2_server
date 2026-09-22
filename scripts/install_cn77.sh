@@ -43,12 +43,48 @@ ensure_download_tools() {
 }
 
 detect_public_ip() {
-    [[ -n "${PUBLIC_IP}" ]] && return
-    if command -v ip >/dev/null 2>&1; then
-        PUBLIC_IP="$(ip route get 1.1.1.1 2>/dev/null | sed -n -E 's/.* src ([0-9.]+).*/\1/p' | head -n 1 || true)"
+    local candidate endpoint
+
+    is_ipv4() {
+        local value="$1" octet
+        local -a octets
+        [[ "${value}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+        IFS=. read -r -a octets <<<"${value}"
+        for octet in "${octets[@]}"; do
+            (( 10#${octet} <= 255 )) || return 1
+        done
+    }
+
+    is_public_ipv4() {
+        local value="$1" a b c d
+        is_ipv4 "${value}" || return 1
+        IFS=. read -r a b c d <<<"${value}"
+        (( a != 0 && a != 10 && a != 127 )) || return 1
+        (( !(a == 100 && b >= 64 && b <= 127) )) || return 1
+        (( !(a == 169 && b == 254) )) || return 1
+        (( !(a == 172 && b >= 16 && b <= 31) )) || return 1
+        (( !(a == 192 && b == 168) )) || return 1
+        (( a < 224 )) || return 1
+    }
+
+    if [[ -n "${PUBLIC_IP}" ]]; then
+        is_ipv4 "${PUBLIC_IP}" || die "L4D2_PUBLIC_IP 不是有效的 IPv4 地址：${PUBLIC_IP}"
+        return
     fi
-    if [[ -n "${PUBLIC_IP}" && ! "${PUBLIC_IP}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-        PUBLIC_IP=""
+
+    for endpoint in http://ipv4.icanhazip.com http://ifconfig.me/ip; do
+        candidate="$(curl -4 -fsS --connect-timeout 3 --max-time 5 "${endpoint}" 2>/dev/null | tr -d '[:space:]' || true)"
+        if is_public_ipv4 "${candidate}"; then
+            PUBLIC_IP="${candidate}"
+            return
+        fi
+    done
+
+    if command -v ip >/dev/null 2>&1; then
+        candidate="$(ip route get 1.1.1.1 2>/dev/null | sed -n -E 's/.* src ([0-9.]+).*/\1/p' | head -n 1 || true)"
+        if is_public_ipv4 "${candidate}"; then
+            PUBLIC_IP="${candidate}"
+        fi
     fi
 }
 

@@ -8,6 +8,7 @@ SERVER_DIR="${ROOT_DIR}/server"
 PORT="${PORT:-27015}"
 MAP="${MAP:-c1m1_hotel}"
 TICKRATE="${TICKRATE:-30}"
+BIND_IP="${BIND_IP:-0.0.0.0}"
 
 # This L4D2 dedicated-server build does not expose sv_setsteamaccount.
 # Keep GSLT in /etc/l4d2/l4d2.env for reference, but do not pass the
@@ -19,6 +20,7 @@ exec ./srcds_run \
     -game left4dead2 \
     -console \
     -usercon \
+    -ip "$BIND_IP" \
     -port "$PORT" \
     -tickrate "$TICKRATE" \
     -maxplayers 31 \
