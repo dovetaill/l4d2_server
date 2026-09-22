@@ -12,14 +12,16 @@ HELP_KV_FILE="$GAME_DIR/addons/sourcemod/configs/pve_help_content.cfg"
 HOSTNAME_FILE="$GAME_DIR/addons/sourcemod/configs/pve_hostname.txt"
 INFECTED_BOTS_CFG="$GAME_DIR/addons/sourcemod/data/l4dinfectedbots/pve_pvpve.cfg"
 ADMINS_FILE="$GAME_DIR/addons/sourcemod/configs/admins_simple.ini"
+RELEASE_PASSWORD_FILE="${L4D2_RELEASE_PASSWORD_FILE:-${L4D2_ETC_ROOT:-/etc/l4d2}/release_password}"
 log(){ printf '[l4d2ctl] %s\n' "$*"; }
 die(){ printf '[l4d2ctl] 错误：%s\n' "$*" >&2; exit 1; }
 load_env(){ [[ -r "$WEB_ENV" ]] || die "缺少 $WEB_ENV"; set -a; source "$WEB_ENV"; set +a; RCON_HOST=${RCON_HOST:-127.0.0.1}; RCON_PORT=${RCON_PORT:-27015}; RCON_PASSWORD=${RCON_PASSWORD:-}; }
 rcon(){ [[ -n "$RCON_PASSWORD" ]] || die '未配置 RCON_PASSWORD'; RCON_HOST="$RCON_HOST" RCON_PORT="$RCON_PORT" PYTHONPATH="$ROOT_DIR/scripts" RCON_PASSWORD="$RCON_PASSWORD" python3 -c 'import os,sys; from l4d2_web_admin import Rcon; r=Rcon(os.environ["RCON_HOST"],int(os.environ["RCON_PORT"]),os.environ["RCON_PASSWORD"]); r.__enter__();
 try: print(r.command(sys.argv[1]),end="")
 finally: r.__exit__()' "$*"; }
+read_release_password(){ local password="${L4D2_RELEASE_ZIP_PASSWORD:-}"; if [[ -z "$password" && -r "$RELEASE_PASSWORD_FILE" ]]; then password="$(<"$RELEASE_PASSWORD_FILE")"; fi; if [[ -z "$password" ]]; then [[ -r /dev/tty ]] || die '当前不是交互终端；请设置 L4D2_RELEASE_ZIP_PASSWORD 或创建 /etc/l4d2/release_password 后重试。'; printf '请输入发布包 ZIP 解压密码： ' >/dev/tty; IFS= read -r -s password </dev/tty || die '无法读取 ZIP 解压密码'; printf '\n' >/dev/tty; fi; [[ "$password" =~ ^[A-Za-z0-9]{8,128}$ ]] || die 'ZIP 解压密码必须为8-128位字母或数字'; printf '%s' "$password"; }
 update_from_release() (
-  local url="${L4D2_RELEASE_ARCHIVE_URL:-http://66.45.226.118:27816/l4d2-cn77-release.zip}" sha="${L4D2_RELEASE_ARCHIVE_SHA256:-}" sha_url="${L4D2_RELEASE_ARCHIVE_SHA256_URL:-}" tmp='' archive source
+  local url="${L4D2_RELEASE_ARCHIVE_URL:-http://66.45.226.118:27816/l4d2-cn77-release.zip}" sha="${L4D2_RELEASE_ARCHIVE_SHA256:-}" sha_url="${L4D2_RELEASE_ARCHIVE_SHA256_URL:-}" tmp='' archive source zip_password
   cleanup_release_tmp(){
     local status=$?
     if [[ -n "$tmp" && -d "$tmp" ]]; then
@@ -41,7 +43,7 @@ update_from_release() (
   printf '%s  %s\n' "$sha" "$archive" | sha256sum -c - >/dev/null || die '发布归档 SHA-256 校验失败'
   mkdir "$tmp/source"
   case "$url" in
-    *.zip|*.zip\?*) unzip -q "$archive" -d "$tmp/source";;
+    *.zip|*.zip\?*) zip_password="$(read_release_password)"; unzip -q -P "$zip_password" "$archive" -d "$tmp/source" || die 'ZIP 解压失败，请确认密码正确且发布包完整。';;
     *) tar -xzf "$archive" -C "$tmp/source";;
   esac
   source=$(find "$tmp/source" -type f -path '*/scripts/bootstrap_l4d2.sh' -printf '%h/..\n' -quit)

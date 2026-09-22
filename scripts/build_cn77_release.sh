@@ -8,10 +8,20 @@ RUNTIME_ROOT="${L4D2_RUNTIME_ROOT:-/opt/l4d2}"
 RELEASE_DIR="${L4D2_RELEASE_DIR:-/var/lib/l4d2-release}"
 RELEASE_NAME="${L4D2_RELEASE_NAME:-l4d2-cn77-release.zip}"
 RELEASE_VERSION="${L4D2_RELEASE_VERSION:-$(date -u +%Y%m%d.%H%M)}"
+RELEASE_PASSWORD_FILE="${L4D2_RELEASE_PASSWORD_FILE:-/etc/l4d2/release_password}"
+RELEASE_PASSWORD="${L4D2_RELEASE_ZIP_PASSWORD:-}"
 TEMP_DIR=""
 
 log() { printf '[cn77-build] %s\n' "$*"; }
 die() { printf '[cn77-build] ERROR: %s\n' "$*" >&2; exit 1; }
+
+load_release_password() {
+    if [[ -z "${RELEASE_PASSWORD}" && -r "${RELEASE_PASSWORD_FILE}" ]]; then
+        RELEASE_PASSWORD="$(<"${RELEASE_PASSWORD_FILE}")"
+    fi
+    [[ "${RELEASE_PASSWORD}" =~ ^[A-Za-z0-9]{8,128}$ ]] || die \
+        "缺少有效的 ZIP 密码；请将仅含字母数字的密码写入 ${RELEASE_PASSWORD_FILE}，或设置 L4D2_RELEASE_ZIP_PASSWORD。"
+}
 
 cleanup() {
     local status=$?
@@ -27,6 +37,7 @@ trap cleanup EXIT
 command -v rsync >/dev/null 2>&1 || die '缺少 rsync'
 command -v zip >/dev/null 2>&1 || die '缺少 zip'
 command -v sha256sum >/dev/null 2>&1 || die '缺少 sha256sum'
+load_release_password
 
 TEMP_DIR="$(mktemp -d /var/tmp/l4d2-cn77-release.XXXXXX)"
 PACKAGE_DIR="${TEMP_DIR}/package"
@@ -136,6 +147,8 @@ This archive contains the current compiled SourceMod runtime, plugins, public
 configuration, SourcePawn sources included in the runtime, and operations
 scripts. It intentionally excludes the Steam game files, server_private.cfg,
 RCON credentials, GSLT, web-admin credentials, database files, and logs.
+The ZIP payload is password protected. The installer asks for the password
+and stores a mode-600 copy at /etc/l4d2/release_password for later updates.
 
 Install from the 66 release host:
   sudo bash install_cn77.sh
@@ -157,8 +170,8 @@ if grep -R -n -E '^[[:space:]]*rcon_password[[:space:]]+"|^WEB_PASSWORD=' "${PAC
     die '检测到 RCON 或网页密码内容，停止打包。'
 fi
 
-log '压缩发布包。'
-(cd "${PACKAGE_DIR}" && zip -q -9 -r "${ARCHIVE_PATH}" .)
+log '压缩并使用 ZIP 密码保护发布包。'
+(cd "${PACKAGE_DIR}" && zip -q -9 -r -P "${RELEASE_PASSWORD}" "${ARCHIVE_PATH}" .)
 (cd "${TEMP_DIR}" && sha256sum "${RELEASE_NAME}") >"${ARCHIVE_PATH}.sha256"
 
 install -d -m 0755 "${RELEASE_DIR}"

@@ -98,6 +98,8 @@ sudo env \
 
 更新必须保留 SteamCMD、游戏数据、日志、SQLite、第三方 Runtime、`/etc/l4d2/*.env` 和 `cfg/server_private.cfg`，并在成功编译全部自制插件后才替换 `.smx`。测试时可使用 `L4D2_TARGET_ROOT` 等环境变量把 Runtime 放入隔离临时目录；不得依赖源码目录中未纳入发布包的缓存。
 
+CN77 发布 ZIP 使用字母数字密码加密。首次安装时会在终端交互输入解压密码，并将 `600` 权限的副本保存到目标机 `/etc/l4d2/release_password`，供后续命令行或网页更新使用。密码不写入 Git，也不进入发布 ZIP 的明文文件。
+
 ## 健康检查与故障排查
 
 ```bash

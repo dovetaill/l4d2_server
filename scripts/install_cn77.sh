@@ -67,6 +67,29 @@ rewrite_public_address() {
     fi
 }
 
+read_release_password() {
+    local password="${L4D2_RELEASE_ZIP_PASSWORD:-}"
+    if [[ -n "${password}" ]]; then
+        printf '%s' "${password}"
+        return
+    fi
+    if [[ -r /dev/tty ]]; then
+        printf '请输入发布包 ZIP 解压密码： ' >/dev/tty
+        IFS= read -r -s password </dev/tty || die '无法读取 ZIP 解压密码'
+        printf '\n' >/dev/tty
+    else
+        die '当前不是交互终端；请设置 L4D2_RELEASE_ZIP_PASSWORD 后重试。'
+    fi
+    [[ "${password}" =~ ^[A-Za-z0-9]{8,128}$ ]] || die 'ZIP 解压密码必须为8-128位字母或数字'
+    printf '%s' "${password}"
+}
+
+save_release_password() {
+    local password="$1"
+    install -d -m 0700 "${ETC_ROOT}"
+    printf '%s\n' "${password}" | install -m 0600 /dev/stdin "${ETC_ROOT}/release_password"
+}
+
 download_release() {
     local archive="$1" sha_file="$2" url="${RELEASE_BASE_URL}/${RELEASE_NAME}" expected actual
     log "从 ${url} 下载已配置的插件与服务器配置。"
@@ -93,7 +116,7 @@ install_update_units() {
 }
 
 main() {
-    local archive extracted source
+    local archive extracted source zip_password
     ensure_download_tools
     detect_public_ip
     TEMP_DIR="$(mktemp -d /tmp/l4d2-cn77-install.XXXXXX)"
@@ -101,7 +124,9 @@ main() {
     download_release "${archive}" "${archive}.sha256"
     extracted="${TEMP_DIR}/extracted"
     mkdir -p "${extracted}"
-    unzip -q "${archive}" -d "${extracted}"
+    zip_password="$(read_release_password)"
+    unzip -q -P "${zip_password}" "${archive}" -d "${extracted}" || die 'ZIP 解压失败，请确认密码正确且发布包完整。'
+    save_release_password "${zip_password}"
     source="$(find "${extracted}" -type f -path '*/scripts/bootstrap_l4d2.sh' -printf '%h/..\n' -quit)"
     [[ -n "${source}" ]] || die '发布包中缺少 scripts/bootstrap_l4d2.sh'
     source="$(cd "${source}" && pwd)"
