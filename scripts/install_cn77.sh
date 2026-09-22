@@ -7,6 +7,7 @@ RELEASE_BASE_URL="${L4D2_RELEASE_BASE_URL:-http://66.45.226.118:27816}"
 RELEASE_NAME="${L4D2_RELEASE_NAME:-l4d2-cn77-release.zip}"
 TARGET_ROOT="${L4D2_TARGET_ROOT:-/opt/l4d2}"
 ETC_ROOT="${L4D2_ETC_ROOT:-/etc/l4d2}"
+DOWNLOAD_CACHE_DIR="${L4D2_DOWNLOAD_CACHE_DIR:-/var/cache/l4d2}"
 PUBLIC_IP="${L4D2_PUBLIC_IP:-}"
 NO_START="${L4D2_NO_START:-0}"
 TEMP_DIR=""
@@ -92,13 +93,49 @@ save_release_password() {
 
 download_release() {
     local archive="$1" sha_file="$2" url="${RELEASE_BASE_URL}/${RELEASE_NAME}" expected actual
+    local partial="${archive}.part" partial_sha="${archive}.part.sha256" sha_tmp="${sha_file}.part"
+    install -d -m 0700 "${DOWNLOAD_CACHE_DIR}"
     log "从 ${url} 下载已配置的插件与服务器配置。"
-    curl -fL --retry 3 --retry-delay 1 --connect-timeout 20 "${url}" -o "${archive}"
-    curl -fL --retry 3 --retry-delay 1 --connect-timeout 20 "${url}.sha256" -o "${sha_file}"
+
+    # The checksum is tiny, but write it atomically so an interrupted update
+    # never replaces a previously usable checksum with a truncated file.
+    curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 \
+        "${url}.sha256" -o "${sha_tmp}"
+    mv -f "${sha_tmp}" "${sha_file}"
     expected="$(awk 'NF && $1 !~ /^#/ {print tolower($1); exit}' "${sha_file}")"
     [[ "${expected}" =~ ^[0-9a-f]{64}$ ]] || die '发布端 .sha256 文件格式错误'
-    actual="$(sha256sum "${archive}" | awk '{print tolower($1)}')"
-    [[ "${actual}" == "${expected}" ]] || die "发布包 SHA-256 校验失败：${actual} != ${expected}"
+
+    if [[ -f "${archive}" ]]; then
+        actual="$(sha256sum "${archive}" | awk '{print tolower($1)}')"
+        if [[ "${actual}" == "${expected}" ]]; then
+            log "发现已校验的本地发布包，跳过重复下载：${archive}"
+            log "发布包校验通过：${actual}"
+            return
+        fi
+        warn "本地发布包校验不匹配，保留旧文件并重新下载。"
+        mv -f "${archive}" "${archive}.invalid.$(date +%s).$$"
+    fi
+
+    if [[ -s "${partial}" ]] && [[ ! -f "${partial_sha}" || "$(<"${partial_sha}")" != "${expected}" ]]; then
+        warn "未完成下载属于旧版本或缺少版本标记，已隔离后重新下载。"
+        mv -f "${partial}" "${partial}.invalid.$(date +%s).$$"
+    fi
+    printf '%s\n' "${expected}" >"${partial_sha}"
+    if [[ -s "${partial}" ]]; then
+        log "发现未完成的下载，继续传输：$(du -h "${partial}" | awk '{print $1}')"
+        curl -fL -C - --retry 5 --retry-delay 2 --connect-timeout 20 \
+            "${url}" -o "${partial}"
+    else
+        curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 \
+            "${url}" -o "${partial}"
+    fi
+    actual="$(sha256sum "${partial}" | awk '{print tolower($1)}')"
+    if [[ "${actual}" != "${expected}" ]]; then
+        mv -f "${partial}" "${partial}.invalid.$(date +%s).$$"
+        die "发布包 SHA-256 校验失败，错误文件已隔离：${actual} != ${expected}"
+    fi
+    mv -f "${partial}" "${archive}"
+    unlink "${partial_sha}" 2>/dev/null || true
     log "发布包校验通过：${actual}"
 }
 
@@ -119,9 +156,10 @@ main() {
     local archive extracted source zip_password
     ensure_download_tools
     detect_public_ip
+    install -d -m 0700 "${DOWNLOAD_CACHE_DIR}"
     TEMP_DIR="$(mktemp -d /tmp/l4d2-cn77-install.XXXXXX)"
-    archive="${TEMP_DIR}/${RELEASE_NAME}"
-    download_release "${archive}" "${archive}.sha256"
+    archive="${DOWNLOAD_CACHE_DIR}/${RELEASE_NAME}"
+    download_release "${archive}" "${DOWNLOAD_CACHE_DIR}/${RELEASE_NAME}.sha256"
     extracted="${TEMP_DIR}/extracted"
     mkdir -p "${extracted}"
     zip_password="$(read_release_password)"

@@ -12,6 +12,7 @@ if command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
     install -m 0755 "${ROOT_DIR}/scripts/serve_cn77_release.sh" /opt/l4d2/scripts/serve_cn77_release.sh
     install -m 0755 "${ROOT_DIR}/scripts/l4d2ctl.sh" /opt/l4d2/scripts/l4d2ctl.sh
     install -m 0755 "${ROOT_DIR}/scripts/update_steamcmd.sh" /opt/l4d2/scripts/update_steamcmd.sh
+    install -m 0755 "${ROOT_DIR}/scripts/release_http_server.py" /opt/l4d2/scripts/release_http_server.py
     install -m 0644 "${ROOT_DIR}/systemd/l4d2-cn77-release.service" /etc/systemd/system/l4d2-cn77-release.service
     install -m 0644 "${ROOT_DIR}/systemd/l4d2-steam-update.service" /etc/systemd/system/l4d2-steam-update.service
     install -m 0644 "${ROOT_DIR}/systemd/l4d2-steam-update.timer" /etc/systemd/system/l4d2-steam-update.timer

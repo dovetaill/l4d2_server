@@ -125,6 +125,7 @@ for file in \
     scripts/install_cn77.sh \
     scripts/update_steamcmd.sh \
     scripts/serve_cn77_release.sh \
+    scripts/release_http_server.py \
     scripts/build_cn77_release.sh \
     scripts/publish_cn77_release.sh; do
     [[ -f "${ROOT_DIR}/${file}" ]] || die "发布脚本缺失：${ROOT_DIR}/${file}"

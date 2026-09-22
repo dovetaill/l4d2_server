@@ -120,6 +120,8 @@ sudo env \
 
 CN77 发布 ZIP 使用字母数字密码加密。首次安装时会在终端交互输入解压密码，并将 `600` 权限的副本保存到目标机 `/etc/l4d2/release_password`，供后续命令行或网页更新使用。密码不写入 Git，也不进入发布 ZIP 的明文文件。
 
+发布 ZIP 和固定依赖默认下载到 `/var/cache/l4d2/`。下载中断时 `.part` 文件会保留，重新运行安装或更新命令会通过 HTTP Range 续传；完成后仍必须通过 SHA-256 校验。发布端 `l4d2-cn77-release.service` 也必须使用项目内的 Range 服务，不得退回不支持续传的 `python3 -m http.server`。
+
 ## 健康检查与故障排查
 
 ```bash

@@ -26,7 +26,7 @@ SKIP_STEAM="${L4D2_SKIP_STEAM:-0}"
 SKIP_FRAMEWORKS="${L4D2_SKIP_FRAMEWORKS:-0}"
 SKIP_PRIVATE_CONFIG="${L4D2_SKIP_PRIVATE_CONFIG:-0}"
 SKIP_SERVICES="${L4D2_SKIP_SERVICES:-0}"
-DOWNLOAD_CACHE="${L4D2_DOWNLOAD_CACHE:-}"
+DOWNLOAD_CACHE="${L4D2_DOWNLOAD_CACHE:-/var/cache/l4d2/artifacts}"
 TEMP_DIR=""
 PROJECT_ROOT="${L4D2_SOURCE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MANIFEST_FILE="${PROJECT_ROOT}/scripts/l4d2_artifact_manifest.sh"
@@ -52,16 +52,47 @@ load_manifest() {
 }
 
 download_artifact() {
-    local key="$1" destination="$2" cache_file
+    local key="$1" destination="$2" cache_file partial partial_sha actual expected
     [[ -n "${L4D2_ARTIFACT_URL[$key]:-}" ]] || die "Unknown artifact key: ${key}"
-    cache_file="${DOWNLOAD_CACHE:+${DOWNLOAD_CACHE}/${L4D2_ARTIFACT_FILE[$key]}}"
-    if [[ -n "${cache_file}" && -f "${cache_file}" ]]; then
-        log "Using verified cache for ${key}."
-        install -m 0644 "${cache_file}" "${destination}"
-    else
+    cache_file="${DOWNLOAD_CACHE}/${L4D2_ARTIFACT_FILE[$key]}"
+    partial="${cache_file}.part"
+    partial_sha="${cache_file}.part.sha256"
+    expected="${L4D2_ARTIFACT_SHA256[$key]}"
+    install -d -m 0700 "${DOWNLOAD_CACHE}"
+    if [[ -f "${cache_file}" ]]; then
+        if printf '%s  %s\n' "${L4D2_ARTIFACT_SHA256[$key]}" "${cache_file}" | sha256sum -c - >/dev/null; then
+            log "Using verified cache for ${key}."
+            install -m 0644 "${cache_file}" "${destination}"
+        else
+            log "Cached ${key} failed verification; downloading a fresh copy."
+            mv -f "${cache_file}" "${cache_file}.invalid.$(date +%s).$$"
+        fi
+    fi
+    if [[ ! -f "${cache_file}" ]]; then
         log "Downloading ${L4D2_ARTIFACT_VERSION[$key]}."
-        curl -fL --retry 3 --retry-delay 1 --connect-timeout 20 \
-            "${L4D2_ARTIFACT_URL[$key]}" -o "${destination}"
+        if [[ -s "${partial}" ]] && [[ ! -f "${partial_sha}" || "$(<"${partial_sha}")" != "${expected}" ]]; then
+            log "Incomplete ${key} download belongs to another version; starting over."
+            mv -f "${partial}" "${partial}.invalid.$(date +%s).$$"
+        fi
+        printf '%s\n' "${expected}" >"${partial_sha}"
+        if [[ -s "${partial}" ]]; then
+            log "Resuming incomplete ${key} download."
+            curl -fL -C - --retry 5 --retry-delay 2 --connect-timeout 20 \
+                "${L4D2_ARTIFACT_URL[$key]}" -o "${partial}"
+        else
+            curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 \
+                "${L4D2_ARTIFACT_URL[$key]}" -o "${partial}"
+        fi
+        actual="$(sha256sum "${partial}" | awk '{print tolower($1)}')"
+        if [[ "${actual}" != "${expected}" ]]; then
+            mv -f "${partial}" "${partial}.invalid.$(date +%s).$$"
+            die "SHA-256 verification failed for ${key}; invalid file was quarantined."
+        fi
+        mv -f "${partial}" "${cache_file}"
+        unlink "${partial_sha}" 2>/dev/null || true
+        install -m 0644 "${cache_file}" "${destination}"
+    elif [[ ! -f "${destination}" ]]; then
+        install -m 0644 "${cache_file}" "${destination}"
     fi
     printf '%s  %s\n' "${L4D2_ARTIFACT_SHA256[$key]}" "${destination}" | sha256sum -c - >/dev/null \
         || die "SHA-256 verification failed for ${key}."

@@ -13,6 +13,7 @@ HOSTNAME_FILE="$GAME_DIR/addons/sourcemod/configs/pve_hostname.txt"
 INFECTED_BOTS_CFG="$GAME_DIR/addons/sourcemod/data/l4dinfectedbots/pve_pvpve.cfg"
 ADMINS_FILE="$GAME_DIR/addons/sourcemod/configs/admins_simple.ini"
 RELEASE_PASSWORD_FILE="${L4D2_RELEASE_PASSWORD_FILE:-${L4D2_ETC_ROOT:-/etc/l4d2}/release_password}"
+DOWNLOAD_CACHE_DIR="${L4D2_DOWNLOAD_CACHE_DIR:-/var/cache/l4d2}"
 log(){ printf '[l4d2ctl] %s\n' "$*"; }
 die(){ printf '[l4d2ctl] 错误：%s\n' "$*" >&2; exit 1; }
 load_env(){ [[ -r "$WEB_ENV" ]] || die "缺少 $WEB_ENV"; set -a; source "$WEB_ENV"; set +a; RCON_HOST=${RCON_HOST:-127.0.0.1}; RCON_PORT=${RCON_PORT:-27015}; RCON_PASSWORD=${RCON_PASSWORD:-}; }
@@ -22,6 +23,7 @@ finally: r.__exit__()' "$*"; }
 read_release_password(){ local password="${L4D2_RELEASE_ZIP_PASSWORD:-}"; if [[ -z "$password" && -r "$RELEASE_PASSWORD_FILE" ]]; then password="$(<"$RELEASE_PASSWORD_FILE")"; fi; if [[ -z "$password" ]]; then [[ -r /dev/tty ]] || die '当前不是交互终端；请设置 L4D2_RELEASE_ZIP_PASSWORD 或创建 /etc/l4d2/release_password 后重试。'; printf '请输入发布包 ZIP 解压密码： ' >/dev/tty; IFS= read -r -s password </dev/tty || die '无法读取 ZIP 解压密码'; printf '\n' >/dev/tty; fi; [[ "$password" =~ ^[A-Za-z0-9]{8,128}$ ]] || die 'ZIP 解压密码必须为8-128位字母或数字'; printf '%s' "$password"; }
 update_from_release() (
   local url="${L4D2_RELEASE_ARCHIVE_URL:-http://66.45.226.118:27816/l4d2-cn77-release.zip}" sha="${L4D2_RELEASE_ARCHIVE_SHA256:-}" sha_url="${L4D2_RELEASE_ARCHIVE_SHA256_URL:-}" tmp='' archive source zip_password
+  local archive_name partial partial_sha
   cleanup_release_tmp(){
     local status=$?
     if [[ -n "$tmp" && -d "$tmp" ]]; then
@@ -37,10 +39,39 @@ update_from_release() (
     sha="$(curl -fsL --retry 3 --retry-delay 1 --connect-timeout 20 "$sha_url" | awk 'NF && $1 !~ /^#/ {print $1; exit}')"
   fi
   [[ "$sha" =~ ^[0-9a-fA-F]{64}$ ]] || die '更新需要完整的 L4D2_RELEASE_ARCHIVE_SHA256，或可访问发布端的 .sha256 文件'
+  archive_name="${url%%\?*}"
+  archive_name="${archive_name##*/}"
+  [[ "$archive_name" =~ ^[A-Za-z0-9._-]+$ ]] || die "无法从发布归档 URL 得到安全文件名：$archive_name"
+  install -d -m 0700 "$DOWNLOAD_CACHE_DIR"
   tmp=$(mktemp -d /tmp/l4d2ctl-release.XXXXXX)
-  archive="$tmp/release.tar.gz"
-  curl -fL --retry 3 --retry-delay 1 --connect-timeout 20 "$url" -o "$archive"
-  printf '%s  %s\n' "$sha" "$archive" | sha256sum -c - >/dev/null || die '发布归档 SHA-256 校验失败'
+  archive="$DOWNLOAD_CACHE_DIR/$archive_name"
+  partial="$archive.part"
+  partial_sha="$archive.part.sha256"
+  if [[ -f "$archive" ]]; then
+    if ! printf '%s  %s\n' "$sha" "$archive" | sha256sum -c - >/dev/null; then
+      log "本地发布归档校验不匹配，保留旧文件并重新下载。"
+      mv -f "$archive" "$archive.invalid.$(date +%s).$$"
+    fi
+  fi
+  if [[ ! -f "$archive" ]]; then
+    if [[ -s "$partial" ]] && [[ ! -f "$partial_sha" || "$(<"$partial_sha")" != "${sha,,}" ]]; then
+      log "未完成的发布归档属于旧版本或缺少版本标记，已隔离后重新下载。"
+      mv -f "$partial" "$partial.invalid.$(date +%s).$$"
+    fi
+    printf '%s\n' "${sha,,}" >"$partial_sha"
+    if [[ -s "$partial" ]]; then
+      log "发现未完成的发布归档，继续传输：$(du -h "$partial" | awk '{print $1}')"
+      curl -fL -C - --retry 5 --retry-delay 2 --connect-timeout 20 "$url" -o "$partial"
+    else
+      curl -fL --retry 5 --retry-delay 2 --connect-timeout 20 "$url" -o "$partial"
+    fi
+    if ! printf '%s  %s\n' "$sha" "$partial" | sha256sum -c - >/dev/null; then
+      mv -f "$partial" "$partial.invalid.$(date +%s).$$"
+      die '发布归档 SHA-256 校验失败，错误文件已隔离'
+    fi
+    mv -f "$partial" "$archive"
+    unlink "$partial_sha" 2>/dev/null || true
+  fi
   mkdir "$tmp/source"
   case "$url" in
     *.zip|*.zip\?*) zip_password="$(read_release_password)"; unzip -q -P "$zip_password" "$archive" -d "$tmp/source" || die 'ZIP 解压失败，请确认密码正确且发布包完整。';;
