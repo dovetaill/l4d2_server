@@ -307,6 +307,7 @@ set_runtime_ownership() {
     [[ ! -d "${STEAMCMD_DIR}" ]] || chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${STEAMCMD_DIR}"
     [[ ! -d "${PROJECT_ROOT}/scripts" ]] || chown -R root:root "${PROJECT_ROOT}/scripts"
     [[ ! -d "${TARGET_ROOT}/scripts" ]] || chown -R root:root "${TARGET_ROOT}/scripts"
+    [[ ! -d "${TARGET_ROOT}/scripts" ]] || chmod 0755 "${TARGET_ROOT}/scripts"
     [[ ! -d "${TARGET_ROOT}/docs" ]] || chown -R root:root "${TARGET_ROOT}/docs"
     [[ ! -d "${TARGET_ROOT}/.git" ]] || chown -R root:root "${TARGET_ROOT}/.git"
     [[ ! -f "${TARGET_ROOT}/scripts/l4d2ctl.sh" ]] || chmod 0755 "${TARGET_ROOT}/scripts/l4d2ctl.sh"
@@ -615,9 +616,7 @@ EOF
     [[ -n "${game_port}" ]] || game_port="$(read_env_value "${GAME_ENV}" PORT || true)"
     [[ -n "${game_port}" ]] || game_port="27015"
     validate_port PORT "${game_port}"
-    if [[ -z "${rcon_host}" ]]; then
-        rcon_host="$(ip route get 1.1.1.1 2>/dev/null | sed -n -E 's/.* src ([0-9.]+).*/\1/p' | head -n 1)"
-    fi
+    [[ -n "${rcon_host}" ]] || rcon_host="$(read_env_value "${WEB_ENV}" RCON_HOST || true)"
     [[ -n "${rcon_host}" ]] || rcon_host="127.0.0.1"
     validate_single_line RCON_HOST "${rcon_host}"
 
