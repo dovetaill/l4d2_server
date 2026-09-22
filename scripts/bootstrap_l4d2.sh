@@ -301,6 +301,8 @@ set_runtime_ownership() {
     # Keep deployment code and Git metadata root-owned. Only the game and
     # SteamCMD runtime trees need to be writable by the dedicated game user.
     chown root:root "${TARGET_ROOT}"
+    chmod 0755 "${TARGET_ROOT}"
+    [[ ! -d "${STEAMCMD_DIR}" ]] || chmod 0755 "${STEAMCMD_DIR}"
     [[ ! -d "${SERVER_DIR}" ]] || chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${SERVER_DIR}"
     [[ ! -d "${STEAMCMD_DIR}" ]] || chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${STEAMCMD_DIR}"
     [[ ! -d "${PROJECT_ROOT}/scripts" ]] || chown -R root:root "${PROJECT_ROOT}/scripts"
