@@ -44,6 +44,13 @@ die() {
     exit 1
 }
 
+require_exec_mount() {
+    local path="$1" mount_options
+    mount_options="$(findmnt -no OPTIONS -T "$path" 2>/dev/null || true)"
+    [[ ",${mount_options}," != *,noexec,* ]] || die "目标文件系统包含 noexec，无法执行 ${path}；请移除 /opt 对应挂载项的 noexec 后重试。挂载信息：${mount_options}"
+}
+
+
 load_manifest() {
     [[ -f "${MANIFEST_FILE}" ]] || die "Artifact manifest is missing: ${MANIFEST_FILE}"
     # shellcheck disable=SC1090
@@ -317,6 +324,15 @@ install_steamcmd() {
         chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${STEAMCMD_DIR}"
     fi
 
+    # Valve archive permissions are not reliable across extraction tools.
+    # Repair the launcher and binaries before dropping privileges.
+    [[ -f "${STEAMCMD_DIR}/steamcmd.sh" ]] || die "SteamCMD launcher is missing: ${STEAMCMD_DIR}/steamcmd.sh"
+    chmod 0755 "${STEAMCMD_DIR}/steamcmd.sh"
+    require_exec_mount "${STEAMCMD_DIR}/steamcmd.sh"
+    [[ ! -e "${STEAMCMD_DIR}/linux32/steamcmd" ]] || chmod 0755 "${STEAMCMD_DIR}/linux32/steamcmd"
+    [[ ! -e "${STEAMCMD_DIR}/linux64/steamcmd" ]] || chmod 0755 "${STEAMCMD_DIR}/linux64/steamcmd"
+    chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "${STEAMCMD_DIR}"
+
     install -d -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" "${SERVER_DIR}"
     log "Installing/updating L4D2 Dedicated Server AppID 222860 with anonymous SteamCMD."
     local app_command=(+app_update 222860 validate)
@@ -324,7 +340,7 @@ install_steamcmd() {
         app_command=(+app_update 222860)
     fi
     runuser -u "${SERVICE_USER}" -- \
-        "${STEAMCMD_DIR}/steamcmd.sh" \
+        /bin/bash "${STEAMCMD_DIR}/steamcmd.sh" \
         +force_install_dir "${SERVER_DIR}" \
         +login anonymous \
         "${app_command[@]}" \
