@@ -210,6 +210,7 @@ main() {
     L4D2_TARGET_ROOT="${TARGET_ROOT}" \
     L4D2_SOURCE_ROOT="${source}" \
     WEB_BIND="${WEB_BIND:-0.0.0.0}" \
+    L4D2_SOURCE_PUBLIC_ADDRESS_AUTHORITATIVE=1 \
     L4D2_SKIP_FRAMEWORKS=1 \
     "${source}/scripts/bootstrap_l4d2.sh" --update --no-start
     install_update_units "${source}"

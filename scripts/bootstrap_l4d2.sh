@@ -26,10 +26,16 @@ SKIP_STEAM="${L4D2_SKIP_STEAM:-0}"
 SKIP_FRAMEWORKS="${L4D2_SKIP_FRAMEWORKS:-0}"
 SKIP_PRIVATE_CONFIG="${L4D2_SKIP_PRIVATE_CONFIG:-0}"
 SKIP_SERVICES="${L4D2_SKIP_SERVICES:-0}"
+SOURCE_PUBLIC_ADDRESS_AUTHORITATIVE="${L4D2_SOURCE_PUBLIC_ADDRESS_AUTHORITATIVE:-0}"
 DOWNLOAD_CACHE="${L4D2_DOWNLOAD_CACHE:-/var/cache/l4d2/artifacts}"
 TEMP_DIR=""
 PROJECT_ROOT="${L4D2_SOURCE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 MANIFEST_FILE="${PROJECT_ROOT}/scripts/l4d2_artifact_manifest.sh"
+INSTANCE_IDENTITY_CAPTURED=0
+INSTANCE_SERVER_HOSTNAME_FILE=""
+INSTANCE_RUNTIME_HOSTNAME_FILE=""
+INSTANCE_PUBLIC_ADDRESS_FILE=""
+INSTANCE_DISPLAY_NAME_FILE=""
 
 log() {
     printf '[bootstrap] %s\n' "$*"
@@ -273,6 +279,85 @@ ensure_service_user() {
     fi
 }
 
+capture_config_directive() {
+    local config="$1" key="$2" destination="$3"
+    [[ -f "${config}" ]] || return 0
+    awk -v key="${key}" '$1 == key { print; exit }' "${config}" >"${destination}"
+    if [[ ! -s "${destination}" ]]; then
+        unlink "${destination}" 2>/dev/null || true
+    fi
+}
+
+
+capture_instance_identity() {
+    local target_server_cfg target_runtime_cfg target_display_name display_name
+    target_server_cfg="${GAME_DIR}/cfg/server.cfg"
+    target_runtime_cfg="${GAME_DIR}/cfg/pve_runtime.cfg"
+    target_display_name="${GAME_DIR}/addons/sourcemod/configs/pve_hostname.txt"
+
+    INSTANCE_SERVER_HOSTNAME_FILE="${TEMP_DIR}/instance-server-hostname"
+    INSTANCE_RUNTIME_HOSTNAME_FILE="${TEMP_DIR}/instance-runtime-hostname"
+    INSTANCE_PUBLIC_ADDRESS_FILE="${TEMP_DIR}/instance-public-address"
+    INSTANCE_DISPLAY_NAME_FILE="${TEMP_DIR}/instance-display-name"
+
+    capture_config_directive "${target_server_cfg}" hostname "${INSTANCE_SERVER_HOSTNAME_FILE}"
+    capture_config_directive "${target_runtime_cfg}" hostname "${INSTANCE_RUNTIME_HOSTNAME_FILE}"
+
+    # Only the one-click installer may replace an existing public address after
+    # it has detected the target machine public IP. Ordinary updates preserve it.
+    if [[ "${SOURCE_PUBLIC_ADDRESS_AUTHORITATIVE}" != "1" ]]; then
+        capture_config_directive "${target_server_cfg}" net_public_adr "${INSTANCE_PUBLIC_ADDRESS_FILE}"
+    fi
+
+    if [[ -f "${target_display_name}" ]]; then
+        IFS= read -r display_name <"${target_display_name}" || true
+        if [[ -n "${display_name}" && "${display_name}" != *$'\r'* ]]; then
+            printf '%s\n' "${display_name}" >"${INSTANCE_DISPLAY_NAME_FILE}"
+        fi
+    fi
+
+    if [[ -f "${INSTANCE_SERVER_HOSTNAME_FILE}" || \
+          -f "${INSTANCE_RUNTIME_HOSTNAME_FILE}" || \
+          -f "${INSTANCE_PUBLIC_ADDRESS_FILE}" || \
+          -f "${INSTANCE_DISPLAY_NAME_FILE}" ]]; then
+        INSTANCE_IDENTITY_CAPTURED=1
+        log "Preserving instance-specific server identity."
+    fi
+}
+
+
+restore_config_directive() {
+    local config="$1" key="$2" saved="$3" tmp
+    [[ -f "${saved}" ]] || return 0
+    install -d "$(dirname "${config}")"
+    tmp="$(mktemp "${TEMP_DIR}/restore-${key}.XXXXXX")"
+    if [[ -f "${config}" ]]; then
+        awk -v key="${key}" -v saved="${saved}" '
+            BEGIN { getline replacement < saved; close(saved); restored = 0 }
+            $1 == key { if (!restored) print replacement; restored = 1; next }
+            { print }
+            END { if (!restored) print replacement }
+        ' "${config}" >"${tmp}"
+    else
+        awk 'NR == 1 { print; exit }' "${saved}" >"${tmp}"
+    fi
+    install -m 0644 "${tmp}" "${config}"
+    unlink "${tmp}"
+}
+
+
+restore_instance_identity() {
+    (( INSTANCE_IDENTITY_CAPTURED == 1 )) || return 0
+    restore_config_directive "${GAME_DIR}/cfg/server.cfg" hostname "${INSTANCE_SERVER_HOSTNAME_FILE}"
+    restore_config_directive "${GAME_DIR}/cfg/server.cfg" net_public_adr "${INSTANCE_PUBLIC_ADDRESS_FILE}"
+    restore_config_directive "${GAME_DIR}/cfg/pve_runtime.cfg" hostname "${INSTANCE_RUNTIME_HOSTNAME_FILE}"
+    if [[ -f "${INSTANCE_DISPLAY_NAME_FILE}" ]]; then
+        install -D -m 0644 "${INSTANCE_DISPLAY_NAME_FILE}" \
+            "${GAME_DIR}/addons/sourcemod/configs/pve_hostname.txt"
+    fi
+}
+
+
 sync_project_tree() {
     install -d -m 0755 "${TARGET_ROOT}"
 
@@ -295,6 +380,7 @@ sync_project_tree() {
             --exclude '/server/left4dead2/addons/sourcemod/data/sqlite/' \
             "${PROJECT_ROOT}/" "${TARGET_ROOT}/"
     fi
+    restore_instance_identity
 }
 
 
@@ -768,6 +854,7 @@ main() {
     load_manifest
     install_dependencies
     ensure_service_user
+    capture_instance_identity
     sync_project_tree
     set_runtime_ownership
     install_steamcmd
