@@ -417,7 +417,7 @@ void ShowInfectedShop(int client)
     menu.AddItem("hp", display);
     Format(display, sizeof(display), "本次生命技能 CD -15%% | %d", g_cvLifeCooldownCost.IntValue);
     menu.AddItem("cd", display);
-    Format(display, sizeof(display), "缩短当前 Ghost 等待 | %d", g_cvGhostCost.IntValue);
+    Format(display, sizeof(display), "缩短当前幽灵复活等待 | %d", g_cvGhostCost.IntValue);
     menu.AddItem("ghost", display);
     Format(display, sizeof(display), "当前技能立即恢复一次 | %d", g_cvRefreshCost.IntValue);
     menu.AddItem("refresh", display);
@@ -891,7 +891,7 @@ void ShowInfectedHUD(int client)
     char role[32];
     if (class == ZC_TANK)
     {
-        strcopy(role, sizeof(role), "TANK");
+        strcopy(role, sizeof(role), "坦克");
     }
     else if (class >= SI_FIRST && class <= SI_LAST)
     {
@@ -899,24 +899,24 @@ void ShowInfectedHUD(int client)
     }
     else
     {
-        strcopy(role, sizeof(role), "Ghost");
+        strcopy(role, sizeof(role), "幽灵");
     }
 
     char state[64];
     if (IsPlayerGhost(client))
     {
-        Format(state, sizeof(state), "Ghost | 复活约 %.0fs", g_cvSIRespawnSeconds.FloatValue);
+        Format(state, sizeof(state), "幽灵 | 复活约 %.0f 秒", g_cvSIRespawnSeconds.FloatValue);
     }
     else if (class == ZC_TANK)
     {
-        Format(state, sizeof(state), "Tank HP %d/%d", GetClientHealth(client), GetMaxHealth(client));
+        Format(state, sizeof(state), "坦克生命 %d/%d", GetClientHealth(client), GetMaxHealth(client));
     }
     else
     {
-        Format(state, sizeof(state), "HP %d/%d", GetClientHealth(client), GetMaxHealth(client));
+        Format(state, sizeof(state), "生命 %d/%d", GetClientHealth(client), GetMaxHealth(client));
     }
     SetHudTextParams(0.02, 0.72, g_cvHUDRate.FloatValue + 0.10, 255, 80, 80, 220, 0, 0.0, 0.0, 0.0);
-    ShowHudText(client, -1, "[感染者] %s\n%s\n积分 %d | Survivor %d | SI %d/%d\nTank 抽签: %s", role, state, points, CountRealSurvivors(), CountSpecialInfected(), GetConfiguredSIMax(), g_bTankQueue[client] ? "ON" : "OFF");
+    ShowHudText(client, -1, "[感染者] %s\n%s\n积分 %d | 真人幸存者 %d | 特感 %d/%d\n坦克抽签：%s", role, state, points, CountRealSurvivors(), CountSpecialInfected(), GetConfiguredSIMax(), g_bTankQueue[client] ? "已加入" : "未加入");
 }
 
 void ApplyHumanBalance(int client)

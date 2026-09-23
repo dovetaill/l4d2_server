@@ -21,6 +21,7 @@ ConVar g_cvTargetSmall;
 ConVar g_cvTargetMedium;
 ConVar g_cvTargetLarge;
 ConVar g_cvTargetFull;
+ConVar g_cvBotWeight;
 ConVar g_cvRecoveryReduction;
 ConVar g_cvPressureBonus;
 ConVar g_cvHardCap;
@@ -79,6 +80,7 @@ public void OnPluginStart()
     g_cvTargetMedium = CreateConVar("l4d2_pve_director_target_5_8", "8", "NORMAL SI target for 5-8 active Survivors.", FCVAR_NOTIFY, true, 1.0, true, 12.0);
     g_cvTargetLarge = CreateConVar("l4d2_pve_director_target_9_12", "10", "NORMAL SI target for 9-12 active Survivors.", FCVAR_NOTIFY, true, 1.0, true, 12.0);
     g_cvTargetFull = CreateConVar("l4d2_pve_director_target_13_16", "12", "NORMAL SI target for 13-16 active Survivors.", FCVAR_NOTIFY, true, 1.0, true, 12.0);
+    g_cvBotWeight = CreateConVar("l4d2_pve_director_bot_weight", "0.5", "Each Survivor bot's contribution to SI difficulty relative to a player.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
     g_cvRecoveryReduction = CreateConVar("l4d2_pve_director_recovery_reduction", "2", "SI target reduction in RECOVERY.", FCVAR_NOTIFY, true, 0.0, true, 8.0);
     g_cvPressureBonus = CreateConVar("l4d2_pve_director_pressure_bonus", "1", "SI target bonus in PRESSURE.", FCVAR_NOTIFY, true, 0.0, true, 2.0);
     g_cvHardCap = CreateConVar("l4d2_pve_director_hard_cap", "12", "Absolute SI policy cap.", FCVAR_NOTIFY, true, 1.0, true, 12.0);
@@ -264,6 +266,8 @@ void EvaluatePolicy()
         return;
     }
     int alive;
+    int humanSurvivors;
+    int botSurvivors;
     int incapacitated;
     int hanging;
     int controlled;
@@ -271,7 +275,7 @@ void EvaluatePolicy()
     bool tankAlive;
     float minimumFlow;
     float maximumFlow;
-    CollectTeamState(alive, incapacitated, hanging, controlled, healthTotal, tankAlive, minimumFlow, maximumFlow);
+    CollectTeamState(alive, humanSurvivors, botSurvivors, incapacitated, hanging, controlled, healthTotal, tankAlive, minimumFlow, maximumFlow);
     if (alive <= 0)
     {
         return;
@@ -287,14 +291,15 @@ void EvaluatePolicy()
     {
         profile = PROFILE_RECOVERY;
     }
-    else if (!tankAlive && incapacitated == 0 && hanging == 0 && controlled == 0 && alive >= 4
+    else if (!tankAlive && incapacitated == 0 && hanging == 0 && controlled == 0 && humanSurvivors >= 2 && alive >= 4
         && averageHealth >= g_cvPressureHealth.FloatValue && spreadRatio <= g_cvPressureSpread.FloatValue
         && (g_fLastSurvivorDamage <= 0.0 || now - g_fLastSurvivorDamage >= 8.0) && CountRecentSIKills(30.0) >= 4)
     {
         profile = PROFILE_PRESSURE;
     }
 
-    int target = GetBaseTarget(alive);
+    float weightedSurvivors = float(humanSurvivors) + float(botSurvivors) * g_cvBotWeight.FloatValue;
+    int target = RoundToCeil(float(GetBaseTarget(alive)) * weightedSurvivors / float(alive));
     target += profile == PROFILE_RECOVERY ? -g_cvRecoveryReduction.IntValue : (profile == PROFILE_PRESSURE ? g_cvPressureBonus.IntValue : 0);
     target = ClampInt(target, 1, g_cvHardCap.IntValue);
     int capacity = CalculateSICapacity();
@@ -313,7 +318,7 @@ void EvaluatePolicy()
     UpdateStatus(profile, target, spawnMin, spawnMax, alive, effective, capacity);
 }
 
-void CollectTeamState(int &alive, int &incapacitated, int &hanging, int &controlled, int &healthTotal,
+void CollectTeamState(int &alive, int &humanSurvivors, int &botSurvivors, int &incapacitated, int &hanging, int &controlled, int &healthTotal,
     bool &tankAlive, float &minimumFlow, float &maximumFlow)
 {
     minimumFlow = 999999.0;
@@ -335,6 +340,14 @@ void CollectTeamState(int &alive, int &incapacitated, int &hanging, int &control
             continue;
         }
         alive++;
+        if (IsFakeClient(client))
+        {
+            botSurvivors++;
+        }
+        else
+        {
+            humanSurvivors++;
+        }
         bool isIncapacitated = GetEntProp(client, Prop_Send, "m_isIncapacitated", 1) != 0;
         bool isHanging = GetEntProp(client, Prop_Send, "m_isHangingFromLedge", 1) != 0;
         bool isControlled = IsControlled(client);

@@ -103,12 +103,12 @@ public Action Command_Status(int client, int args)
 {
     if (!IsRealSurvivor(client))
     {
-        ReplyToCommand(client, "[Overdrive] 仅真人 Survivor 可以使用。");
+        ReplyToCommand(client, "[火力强化] 仅真人幸存者可以使用。");
         return Plugin_Handled;
     }
 
     float cooldown = GetCooldownRemaining(client);
-    ReplyToCommand(client, "[Overdrive] 状态=%s，剩余冷却=%.1f 秒。", IsOverdriveActive(client) ? "ACTIVE" : "READY", cooldown);
+    ReplyToCommand(client, "[火力强化] %s，剩余冷却 %.1f 秒。", IsOverdriveActive(client) ? "正在生效" : "可使用", cooldown);
     return Plugin_Handled;
 }
 

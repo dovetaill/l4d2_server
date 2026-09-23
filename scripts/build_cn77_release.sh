@@ -64,6 +64,13 @@ rsync -a \
 
 # The live install contains compiled plugins, while the project tree owns the
 # maintained SourcePawn sources. Overlay both so a target can compile safely.
+for plugin in l4d2_campaign_shop l4d2_end_safearea_teleport l4d2_incap_support \
+    l4d2_pve_respawn l4d2_pve_director_controller l4d2_pve_help_menu l4d2_pve_infected_core \
+    l4d2_pve_overdrive l4d2_pve_mutant_tanks l4d2_switch_ammo; do
+    compiled="${ROOT_DIR}/server/left4dead2/addons/sourcemod/plugins/${plugin}.smx"
+    [[ -s "${compiled}" ]] || die "已维护插件尚未编译：${compiled}"
+    install -m 0644 "${compiled}" "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/plugins/${plugin}.smx"
+done
 if [[ -d "${ROOT_DIR}/server/left4dead2/cfg" ]]; then
     rsync -a --exclude 'server_private.cfg' \
         "${ROOT_DIR}/server/left4dead2/cfg/" \
@@ -108,7 +115,7 @@ if [[ -f "${PACKAGE_DIR}/server/left4dead2/addons/sourcemod/plugins/nextmap.smx"
 fi
 for source in \
     l4d2_campaign_shop.sp l4d2_automatic_weapons.sp l4d2_unicode_hostname.sp \
-    l4d2_clear_thirdstrike.sp l4d2_combat_rewards.sp l4d2_incap_support.sp \
+    l4d2_clear_thirdstrike.sp l4d2_combat_rewards.sp l4d2_incap_support.sp l4d2_pve_respawn.sp \
     l4d2_end_safearea_teleport.sp l4d2_pve_admin.sp l4d2_pve_help_menu.sp \
     l4d2_pve_infected_core.sp l4d2_pve_damage_display.sp l4d2_playable_witch.sp \
     l4d2_pve_mutant_tanks.sp l4d2_switch_upgrade_ammo.sp; do

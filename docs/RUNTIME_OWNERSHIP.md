@@ -16,6 +16,7 @@
 | Witch 实体/真人控制 | `l4d2_playable_witch` | Core、Shop、HUD、Admin | 仅 Playable Witch | `pve_playable_witch_*` | multi-witches、boss spawn、第二套 controller | request native；EntityRef；恢复 Survivor bot |
 | Friendly Fire | No Friendly-Fire 10.0 | Health、日志 | 仅 NoFF | guns/melee/fires/explosions/survivors | `anti-friendly_fire*`、damage modifier、反伤 | 唯一性+CVar；真人全武器测试 |
 | Survivor 战役货币/商城 | `l4d2_campaign_shop` | Core、Rewards、HUD、Admin | 仅 Shop | `l4d2_campaign_shop_*` | 第二套 shop/currency/VIP economy | 单一 points native；无永久存档 |
+| Survivor 阵亡复活 | `l4d2_pve_respawn` | MultiSlots、Left4DHooks | 仅阵亡真人 10 秒计时与空闲 Bot 接管 | `l4d2_pve_respawn_*` | 第二套自动复活计时器 | 不抢闲置真人 Bot；无 Bot 时直接复活 |
 | 战斗奖励 | `l4d2_combat_rewards` | HUD、Admin | 仅 Rewards | reward/loot/Second Wind | RPG、Gun XP、永久 HP | heal 默认 0；换图无成长 |
 | AntiRush | `l4d2_pve_antirush` | HUD、Admin、Director | 仅 AntiRush | flow threshold、duration、penalty | `no-rushing`、第二套 rush control | Flow median/anchor；豁免真人测试 |
 | Safearea/随机开门员/final gate | `l4d2_end_safearea_teleport` | HUD、Admin | 仅 Safearea Owner | opener 120s、ratio 0.70、near 600、grace 60s | 全门锁插件、第二套 safearea teleporter | 首门 SDKHook；Finale bypass；防卡关测试 |

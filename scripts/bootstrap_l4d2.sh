@@ -442,6 +442,7 @@ validate_runtime_ownership() {
         spawn_infected_nolimit.smx
         l4d2_pve_infected_core.smx
         l4d2_playable_witch.smx
+        l4d2_pve_respawn.smx
         l4d2_pve_director_controller.smx
         l4d2_pve_antirush.smx
         l4d2_pve_server_hud.smx
@@ -793,6 +794,7 @@ compile_plugins() {
         "l4d2_clear_thirdstrike.sp:l4d2_clear_thirdstrike.smx"
         "l4d2_combat_rewards.sp:l4d2_combat_rewards.smx"
         "l4d2_incap_support.sp:l4d2_incap_support.smx"
+        "l4d2_pve_respawn.sp:l4d2_pve_respawn.smx"
         "l4d2_end_safearea_teleport.sp:l4d2_end_safearea_teleport.smx"
         "l4d2_pve_admin.sp:l4d2_pve_admin.smx"
         "l4d2_pve_help_menu.sp:l4d2_pve_help_menu.smx"

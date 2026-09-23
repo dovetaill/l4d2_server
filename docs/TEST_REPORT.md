@@ -71,6 +71,12 @@
 | 空服从 >0 降到 0 后 90 秒重启 | NOT HUMAN VERIFIED |
 | Custom Map / Finale / 救援载具 | NOT HUMAN VERIFIED |
 
+## 玩家反馈修复回归（2026-09-23）
+
+本轮更改已在无真人在线时安装到 `/opt/l4d2`，旧游戏进程经两次受控重启退出，新的 `l4d2.service` 保持运行。新增和修改的 10 个 SourcePawn 插件均使用项目 `spcomp` 编译成功；`git diff --check`、相关 Shell 脚本 `bash -n`、`l4d2ctl health` 均通过。RCON 校验确认 AWP 价格 9999、Bot 难度权重 0.5、最少幸存者 12、自救弹药计数 64、阵亡复活间隔 10 秒；`sm_pvemtvalidate` 报告 146/146 类型配置、138 个随机池类型且边界 1-146。
+
+仍须真人在客户端逐项验证 H 键显示、倒地长按 E 进度条、自救和缓慢移动、特殊弹药长时间运行、Bot 接管与 10 秒重复复活、Tank 变身后能力是否正确生效。当前 31 个 MaxClients 无法同时容纳 30 名幸存者、特感和预留槽位；简体中文菜单和常见提示已修正，但第三方 Mutant Tanks 仍有大量未翻译的技能文字，不能报告为全面汉化完成。
+
 ## 性能矩阵
 
 12 Survivor + 10-12 SI + 大尸潮 + Tank 的 10 分钟固定场景尚未由真人执行。CPU、VAR、Choke、客户端 FPS、尸体清理前后平均/峰值 Entity Count 均为 `NOT HUMAN VERIFIED`。尸体清理是否长期保留必须以相同地图、相同人数、相同 SI/Common 配置的 A/B 数据为准。

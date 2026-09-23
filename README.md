@@ -4,7 +4,7 @@
 
 ## 自研插件
 
-当前项目维护并编译 20 个自研 SourceMod 插件。第三方插件、SourceMod 基础插件和运行依赖不在下表中，详见 [`docs/PLUGIN_MANIFEST.md`](docs/PLUGIN_MANIFEST.md)。运行时唯一所有者矩阵见 [`docs/RUNTIME_OWNERSHIP.md`](docs/RUNTIME_OWNERSHIP.md)，性能基线见 [`docs/PERFORMANCE_BASELINE.md`](docs/PERFORMANCE_BASELINE.md)。
+当前项目维护并编译 21 个自研 SourceMod 插件。第三方插件、SourceMod 基础插件和运行依赖不在下表中，详见 [`docs/PLUGIN_MANIFEST.md`](docs/PLUGIN_MANIFEST.md)。运行时唯一所有者矩阵见 [`docs/RUNTIME_OWNERSHIP.md`](docs/RUNTIME_OWNERSHIP.md)，性能基线见 [`docs/PERFORMANCE_BASELINE.md`](docs/PERFORMANCE_BASELINE.md)。
 
 | 标题 | 功能 | 链接（自研） |
 |---|---|---|
@@ -13,6 +13,7 @@
 | L4D2 Clear Thirdstrike | 使用药丸或肾上腺素时减少一次倒地次数，最低保持为配置的下限。 | [`l4d2_clear_thirdstrike.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_clear_thirdstrike.sp) |
 | L4D2 Combat Rewards | 提供战役内战斗回血、Second Wind、Tank 战利品和可部署机枪奖励。 | [`l4d2_combat_rewards.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_combat_rewards.sp) |
 | L4D2 Incap Support | 玩家倒地后允许受控移动，并可使用药丸或肾上腺素进行自救。 | [`l4d2_incap_support.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_incap_support.sp) |
+| L4D2 PvE Survivor Respawn | 玩家死亡 10 秒后接管复活的 Bot，无 Bot 时直接复活；复活者获得随机普通枪械。 | [`l4d2_pve_respawn.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_respawn.sp) |
 | L4D2 Safearea Owner | 负责每章随机开门员、最终安全区 70% 团队 Gate 和 60 秒防卡关传送。 | [`l4d2_end_safearea_teleport.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_end_safearea_teleport.sp) |
 | L4D2 PvE Admin | 提供只读状态页和受控管理入口；生产默认禁止直接刷 SI、Tank、Witch 或清实体。 | [`l4d2_pve_admin.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp) |
 | L4D2 PvE Chinese Help Menu | 提供面向玩家的中文 PvE/PvPvE 开始菜单、指令帮助和欢迎提示。 | [`l4d2_pve_help_menu.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_help_menu.sp) |

@@ -215,7 +215,7 @@ public Action OnEndDoorUse(int entity, int activator, int caller, UseType type, 
     g_hGateStatus.SetString(status);
     if (GetGameTime() >= g_fNextBlockedNotice[activator])
     {
-        PrintHintText(activator, "最终安全区需要 %d/%d 名存活 Survivor 到位（当前 %d）", required, total, ready);
+        PrintHintText(activator, "最终安全区需要 %d/%d 名存活幸存者到位（当前 %d）", required, total, ready);
         g_fNextBlockedNotice[activator] = GetGameTime() + 2.0;
     }
     return Plugin_Handled;
@@ -368,7 +368,7 @@ void StartGraceTimer(int client)
     g_fDestination[2] += 12.0;
     g_iRemaining = g_hDelay.IntValue;
     g_bActive = true;
-    PrintHintTextToAll("Final safe area reached. Remaining survivors will be moved in %d seconds.", g_iRemaining);
+    PrintHintTextToAll("已有幸存者到达终点，%d 秒后传送未到达的队友。", g_iRemaining);
     g_hTimer = CreateTimer(1.0, Timer_Grace, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 }
 
@@ -395,7 +395,7 @@ public Action Timer_Grace(Handle timer)
 
     if (g_iRemaining == 30 || g_iRemaining == 15 || g_iRemaining <= 10)
     {
-        PrintHintTextToAll("Final safe area: %d", g_iRemaining);
+        PrintHintTextToAll("终点安全区：剩余 %d 秒", g_iRemaining);
     }
     return Plugin_Continue;
 }
@@ -422,7 +422,7 @@ void TeleportLaggingSurvivors()
 
     if (moved > 0)
     {
-        PrintHintTextToAll("%d survivor(s) were moved into the final safe area.", moved);
+        PrintHintTextToAll("已将 %d 名幸存者传送到终点安全区。", moved);
     }
 }
 

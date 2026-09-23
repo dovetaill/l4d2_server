@@ -1,25 +1,11 @@
-<!doctype html>
-<html lang="zh-CN">
-<head><meta charset="utf-8"><title>无限火力 PvPvE 开始菜单</title></head>
-<body>
-<h1>无限火力战役 PvPvE</h1>
-<p>输入 <code>!菜单</code> 或 <code>!pvehelp</code> 打开游戏内中文菜单。</p>
-<h2>常用功能</h2>
-<ul>
-<li><code>!buy</code> / <code>!shop</code>：打开商城</li>
-<li><code>!points</code> / <code>!money</code>：查看当前战役积分</li>
-<li><code>!infected</code> / <code>!特感</code>：加入感染者阵营</li>
-<li><code>!survivor</code> / <code>!人类</code>：返回幸存者阵营</li>
-<li><code>!zclass</code> / <code>!特感选择</code>：选择普通特感职业</li>
-<li><code>!tankqueue</code>：加入 Tank 抽签</li>
-<li><code>!notank</code>：退出 Tank 抽签</li>
-</ul>
-<h2>战斗说明</h2>
-<ul>
-<li>拾取枪械燃烧/爆炸升级弹后，特殊升级弹药会持续补充。</li>
-<li><b>Shift + Reload</b>：切换普通弹、燃烧升级弹、爆炸升级弹。</li>
-<li>积分只在当前战役内使用，不是永久等级。</li>
-</ul>
-<h2>H 键</h2>
-<p>H 默认打开本帮助页。想让 H 直接打开游戏内中文菜单，可在游戏控制台执行：<code>bind h "sm_pvehelp"</code></p>
-</body></html>
+无限火力战役 PvPvE 服务器
+
+按 H 或输入 !菜单 / !motd：查看中文公告与玩法菜单。
+倒地后可移动；持有止痛药或肾上腺素时长按 E 自救。
+阵亡后等待 10 秒自动复活，优先接管一名幸存者 Bot。
+按 Shift + R 切换普通弹、燃烧弹或爆炸弹。
+!buy / !shop：打开商城；!points：查看本局积分。
+!infected / !survivor：切换阵营。
+!tankqueue / !notank：参加或退出 Tank 抽签。
+
+欢迎一起合作闯关！

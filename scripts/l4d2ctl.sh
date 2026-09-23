@@ -157,6 +157,7 @@ health(){
       no_friendly-fire.smx l4d_reservedslots.smx l4d_kickloadstuckers.smx \
       l4d2_pve_infected_core.smx l4d2_playable_witch.smx WeaponHandling.smx \
       l4d2_pve_overdrive.smx l4d2_pve_server_hud.smx spawn_infected_nolimit.smx \
+      l4d2_incap_support.smx l4d2_pve_respawn.smx \
       l4dinfectedbots.smx l4d2_pve_director_controller.smx l4d2_pve_antirush.smx \
       l4d2_pve_perf_guard.smx l4d2_pve_corpse_cleaner.smx l4d2_restart_empty.smx \
       l4d2_end_safearea_teleport.smx physics_object_pushfix.smx \

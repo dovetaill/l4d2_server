@@ -11,7 +11,7 @@ public Plugin myinfo =
     name = "L4D2 PvE Chinese Help Menu",
     author = "Codex",
     description = "Player-visible Chinese PvE/PvPvE start menu and command help.",
-    version = "1.1.0",
+    version = "1.2.0",
     url = ""
 };
 
@@ -39,6 +39,9 @@ public void OnPluginStart()
     RegConsoleCmd("sm_helpme", Command_HelpMenu, "打开中文 PvE 开始菜单");
     RegConsoleCmd("sm_帮助", Command_HelpMenu, "打开中文 PvE 开始菜单");
     RegConsoleCmd("sm_菜单", Command_HelpMenu, "打开中文 PvE 开始菜单");
+    RegConsoleCmd("sm_motd", Command_HelpMenu, "打开游戏内中文公告菜单");
+    AddCommandListener(Listener_Motd, "motd");
+    AddCommandListener(Listener_Motd, "showmotd");
     RegAdminCmd("sm_pvehelpreload", Command_ReloadHelp, ADMFLAG_CONFIG, "重新加载 PvE 帮助菜单 KeyValues 配置");
 
     AutoExecConfig(true, "l4d2_pve_help_menu");
@@ -90,7 +93,18 @@ public Action Timer_Welcome(Handle timer, int userid)
     }
 
     PrintToChat(client, "%s", g_sAnnouncement);
+    ShowMainMenu(client);
     return Plugin_Stop;
+}
+
+public Action Listener_Motd(int client, const char[] command, int argc)
+{
+    if (client > 0 && IsClientInGame(client) && g_cvEnabled.BoolValue)
+    {
+        ShowMainMenu(client);
+        return Plugin_Handled;
+    }
+    return Plugin_Continue;
 }
 
 void RestartAnnouncementTimer()
@@ -352,7 +366,7 @@ void NormalizeChatText(char[] value, int maxlen)
 void SetDefaultHelpContent()
 {
     strcopy(g_sHelpTitle, sizeof(g_sHelpTitle), "无限火力 PvPvE 开始菜单");
-    strcopy(g_sAnnouncement, sizeof(g_sAnnouncement), "[开始菜单] 输入 !菜单 或 !pvehelp 打开中文帮助；按 H 可查看服务器帮助页。");
+    strcopy(g_sAnnouncement, sizeof(g_sAnnouncement), "[公告] 已打开中文开始菜单；按 H 或输入 !菜单 / !motd 可再次查看。");
 
     for (int i = 0; i < MAX_HELP_LINES; i++)
     {
@@ -362,7 +376,7 @@ void SetDefaultHelpContent()
 
     strcopy(g_sDetails[0], HELP_TEXT_LENGTH, "本服：无限火力战役 PvPvE");
     strcopy(g_sDetails[1], HELP_TEXT_LENGTH, "幸存者推进地图，感染者可由真人加入");
-    strcopy(g_sDetails[2], HELP_TEXT_LENGTH, "H：默认打开服务器中文帮助页");
+    strcopy(g_sDetails[2], HELP_TEXT_LENGTH, "H 或 !motd：打开服务器中文菜单");
     strcopy(g_sDetails[3], HELP_TEXT_LENGTH, "Shift + Reload：有第二把主武器时切换武器，否则切换升级弹");
     strcopy(g_sDetails[4], HELP_TEXT_LENGTH, "幸存者之间无队友伤害，不使用反伤或扣除攻击者生命");
     strcopy(g_sDetails[5], HELP_TEXT_LENGTH, "积分只在当前战役有效，不保存永久等级或 RPG 属性");
@@ -370,6 +384,8 @@ void SetDefaultHelpContent()
     strcopy(g_sDetails[7], HELP_TEXT_LENGTH, "AntiRush 先警告，再安全传送并扣除少量本局积分");
     strcopy(g_sDetails[8], HELP_TEXT_LENGTH, "Overdrive 是商城购买的 15 秒临时 WeaponHandling 强化");
     strcopy(g_sDetails[9], HELP_TEXT_LENGTH, "普通感染者尸体快速清理；幸存者尸体不会自动清理");
+    strcopy(g_sDetails[10], HELP_TEXT_LENGTH, "倒地后可以缓慢移动，持有药丸或肾上腺素时长按 E 自救");
+    strcopy(g_sDetails[11], HELP_TEXT_LENGTH, "阵亡 10 秒后自动复活，优先救活并接管幸存者 Bot");
 
     strcopy(g_sCommands[0], HELP_TEXT_LENGTH, "!菜单 / !pvehelp：打开开始菜单");
     strcopy(g_sCommands[1], HELP_TEXT_LENGTH, "!buy / !shop：打开商城");

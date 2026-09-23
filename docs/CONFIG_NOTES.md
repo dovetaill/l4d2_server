@@ -40,6 +40,10 @@ l4d2_pve_director_engine_headroom 2
 
 预留位属于 MaxClients 预算，Director 还会扣除已连接客户端和至少 2 个安全 headroom。未来 16+1 通过配置调整，不在源码写死。管理员位只 Reserve，不随机踢人、不踢高 Ping、最后加入者或 AFK 玩家。
 
+当前 MultiSlots 最少和最多均为 12 名幸存者，开局自动补 Bot；1 名真人时至多有 11 名 Bot，真人可接管空闲 Bot。Director 计算特感目标时真人按 1、Bot 按 0.5 计入，并禁止单人触发高压档。玩家阵亡后 10 秒优先接管复活的 Bot，没有空闲 Bot 时直接复活；新复活角色只获得普通枪械。30 名幸存者加真人特感、预留位与安全余量会超过当前 31 个引擎客户端槽位，因此不能把 `min_survivors` 直接设成 30；若要 29 Bot，须先单独验证更大槽位扩展、性能和插件兼容性。
+
+MOTD 同时有纯文本文件与入服自动弹出的中文游戏菜单，避免客户端不能显示 HTML 时出现空白。SourceMod 默认语言固定为简体中文；第三方插件尚未提供简体中文翻译的消息仍可能退回英文，不能将此配置理解成所有第三方提示已翻译。
+
 ## Friendly Fire
 
 `cfg/sourcemod/no_friendly-fire.cfg`：

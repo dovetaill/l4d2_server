@@ -232,6 +232,11 @@ public Action MT_OnTypeChosen(int &type, int tank)
         return Plugin_Changed;
     }
 
+    if (tank > 0 && tank <= MaxClients && IsClientInGame(tank) && !IsFakeClient(tank) && IsConfiguredType(type))
+    {
+        return Plugin_Continue;
+    }
+
     if (source == PveMutantTankSource_Normal && g_cvNormalPerChapter.IntValue > 0 && g_iNormalCount >= g_cvNormalPerChapter.IntValue)
     {
         ClearPendingSpawn();
