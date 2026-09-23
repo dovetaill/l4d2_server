@@ -1,84 +1,72 @@
 # L4D2 PvPvE 插件清单
 
-状态日期：2026-09-21（America/New_York）。
+状态日期：2026-09-22（America/New_York）。
 
-本文只描述源码仓库中的公开版本、作者来源、运行时职责和验证边界。完整下载 URL、归档文件名和 SHA-256 以 `scripts/l4d2_artifact_manifest.sh` 为准；手工核对表见 `docs/MANUAL_DOWNLOADS.md`。密码、GSLT、RCON、网页认证和 `/etc/l4d2` 私密配置不属于本清单。
+本文记录已固定、已编译和明确延后的组件。下载 URL、版本、不可变 commit、归档名和 SHA-256 以 `scripts/l4d2_artifact_manifest.sh` 为唯一机器清单；人工核对表见 `docs/MANUAL_DOWNLOADS.md`。任何仅有未知二进制、私有源码或无法确认作者出处的候选均不得进入 Runtime。
 
 ## 固定基础组件
 
-| 组件 | 固定版本/提交 | 官方或作者来源 | 部署约束 |
+| 组件 | 固定版本/提交 | 作者来源 | 许可证/运行约束 |
 |---|---|---|---|
-| SteamCMD | Valve Linux installer snapshot；AppID `222860` | Valve 官方 CDN | 只用于安装/更新 L4D2，不把登录凭据写入仓库 |
-| MetaMod:Source | `1.12.0-git1226` | AlliedModders 官方归档 | L4D2 保留正常 32 位 VDF；只禁用 `addons/metamod_x64.vdf` |
-| SourceMod | `1.12.0-git7253` | SourceMod 官方归档 | 使用同一归档内的 `spcomp` 编译插件 |
-| L4DToolZ | `2.5.1` build `2155` | lakwsh 官方 release | 固定归档和 SHA-256 |
-| Actions | `3.9.2` | Vinillia 官方 release | 只安装 3.9.2；明确不安装 4.0.1 |
-| Left4DHooks | `1.168`，commit `f90ae5e62228e0b7baf12cda922e3fd40db844f4` | SilvDev 作者仓库固定提交 | 保留 plugin、gamedata、include、data 等伴随文件 |
-| Mutant Tanks | `9.3`，commit `c7ef30eea49abce235ef9ff50587aed7cd3c4d5a` | Psykotikism 作者仓库固定提交 | 使用当前本地 146 类型配置，不引入第二套类型表 |
-| InfectedBots | `3.0.8`，commit `8e67e4f659023fccb2fa65fbb74ad38547463302` | fbef0102 作者仓库固定提交 | 按选定模块安装 gamedata、translations、data、include |
+| SteamCMD | Valve Linux snapshot；AppID `222860` | Valve 官方 CDN | 仅安装/更新游戏 |
+| MetaMod:Source | `1.12.0-git1226` | AlliedModders | 保留 L4D2 32 位加载链 |
+| SourceMod | `1.12.0-git7253` | SourceMod | 所有 SourcePawn 使用归档内同一 `spcomp` |
+| L4DToolZ | `2.5.1` build `2155` | lakwsh | 提供 31 MaxClients；不启用 100 tick |
+| Actions | `3.9.2` | Vinillia | `4.x` 不在当前兼容矩阵 |
+| Left4DHooks | `1.168`，`f90ae5e62228e0b7baf12cda922e3fd40db844f4` | SilvDev | GPL-3.0；保留 gamedata/include/data |
+| Mutant Tanks | `9.3`，`c7ef30eea49abce235ef9ff50587aed7cd3c4d5a` | Psykotikism | 保留 146 类型配置和 Human Support |
+| InfectedBots | `3.0.8-pve.1`，上游 `8e67e4f659023fccb2fa65fbb74ad38547463302` | fbef0102 | 本地策略补丁受 Git 管理；唯一 SI Spawn Executor |
+| Dynamic Infected Spawn Balancer | `1.0.1` | szGabu | AGPL-3.0；只允许管理 Common；六个 SI/Tank 相关写权限固定为 0 |
+| WeaponHandling API | `1.0.7`，`90391e079d0dd3b0c1c98d786372f28e7d6536e8` | LuxLuma | GPL-3.0；仅由 Overdrive 写临时倍率 |
+| No Friendly-Fire | `10.0`，`c4985243d77e4ba2ec58b586a45ba8f3a009821e` | Psykotikism | 唯一 Friendly Fire Owner |
+| SMAC | `0.8.8.0`，`ea15f3ec0c8d9c499d0e42d7174675dd6d30780b` | Rushaway snapshot | 只编译选定的 6 个模块 |
 
 ## 固定源码快照
 
-以下快照来自作者仓库的不可变 commit URL，并由清单脚本校验 SHA-256：
+| 快照 | 选定内容 | Immutable commit | 说明 |
+|---|---|---|---|
+| `fbef_plugins` | InfectedBots、MultiSlots、Defib Fix、Survivor AFK Fix 等选定模块 | `8e67e4f659023fccb2fa65fbb74ad38547463302` | 不安装重复 SI/Tank/Witch/Restart Owner |
+| `fbef_phase1` | `l4d_reservedslots`、`l4d_kickloadstuckers`、两项换队修复、`physics_object_pushfix` | `e0fd18072b82498ed98535329f8b581262a8ff19` | 本地策略补丁受 Git 管理；归档 SHA 见下载表 |
+| `wyxls_plugins` | Automatic Weapons、Defib Fix、Survivor AFK Fix | `c1d14e5f06368363d6800311db752ef6e6b22eda` | Gear Transfer 编译不兼容并保持 disabled |
+| `dual_primary` | Dual Primaries `1.5.8` | `83e2b71c0b21e2a6291b066f903c6af18254a90c` | 从源码编译 |
+| `votekick` | Votekick `5.3` | `8323e0aa01a8c72e52c4468b4a2bbb41976cab67` | 从源码编译 |
+| `multicolors` | SMAC 编译 include | `d2f2dc9126255571c0fc4499d5729cacb57265ca` | 保留 include 层级 |
+| `predicaments` | Predicaments `0.4` | `5c148841817f305999dd3574645f45cc6a99bf7c` | 已固定但生产 disabled，避免重复救援/状态 Owner |
 
-- `wyxls_plugins`：Automatic Weapons、Gear Transfer 及相关 L4D2 插件。
-- `dual_primary`：Dual Primaries `1.5.8` 源码，安装器编译为 `dual_primaries.smx`。
-- `predicaments`：Predicaments `0.4` 源码/伴随文件。
-- `votekick`：Votekick `5.3` 源码，安装器编译为 `l4d_votekick.smx`。
-- `no_friendly_fire`：No Friendly-Fire `10.0` 源码/伴随文件。
-- `smac`：SMAC `0.8.8.0` 源码快照。
-- `multicolors`：SMAC 编译所需的 MultiColors include 快照，保留 `multicolors/` include 层级。
+## Production Ownership
 
-## 运行模块与唯一所有者
+- SI 实体生成：InfectedBots；`spawn_same_frame=0`、`coordination=0`。`l4d2_pve_director_controller` 只决定目标、间隔、权重和 Recovery/Normal/Pressure，不创建实体。
+- SI AI：AI_HardSI。Common 数量：Dynamic Infected Spawn Balancer；SI general、Dominator、SI interval、Tank balance、Tank HP 和 versus-like 六项必须为 0。`server.cfg` 最终阶段显式重载 Owner 配置，`health` 再查询在线 CVar。
+- 真人感染者阵营、职业、感染者积分和自然 Tank lottery：`l4d2_pve_infected_core`。Tank 由官方 Director 生成，core 只 Gate/接管，Mutant Tanks 负责类型和能力。
+- Witch：`l4d2_playable_witch` 是唯一真人 Witch 控制器。每章最多一次免费抽签，默认 35%，Flow 25%-80%。
+- Friendly Fire：No Friendly-Fire 10.0；枪、近战、火、爆炸全部拦截 Survivor 对 Survivor 伤害，不反伤。
+- Survivor 战役货币/商城：`l4d2_campaign_shop`。战斗奖励：`l4d2_combat_rewards`。无永久 RPG 属性。
+- AntiRush、全局 HUD、Overdrive、尸体清理、性能监测、空服重启和 Safearea 分别由同名自研插件单独拥有，详见 `docs/RUNTIME_OWNERSHIP.md`。
+- 管理员位：本地审阅版 `l4d_reservedslots 1.8-pve.1`，默认 12 公共位 + 1 隐藏 reservation 位，不踢已在线普通玩家。
 
-- SI 数量/波次：InfectedBots；SI AI：AI_HardSI；普通感染者缩放：Dynamic Infected Spawn Balancer。
-- Tank HP、能力和 Human Support：Mutant Tanks 9.3。
-- PvPvE Tank 随机池、白名单/黑名单/权重和 normal/purchased/admin 计数：`l4d2_pve_mutant_tanks.smx`。
-- Friendly Fire：No Friendly-Fire。
-- 积分/商城：`l4d2_campaign_shop.smx`；不使用第二套永久积分数据库。
-- Witch 实体和玩家控制：`l4d2_playable_witch.smx`。
-- 奖励、Second Wind 和 loot：`l4d2_combat_rewards.smx`。
-- 其他固定伴随模块包括 MultiSlots、满槽 bot/死亡检测/升级包修复、Automatic Weapons、Dual Primaries、Gear Transfer、Item Hint、map Tank fix、finale stage fix、Tank glow、Tank/Witch notify、Predicaments、AFK、no-rushing、assist、kills、clear weapon drop 和 Command Buffer Fixer。
+## Production Disabled
 
-## SMAC 选定模块
+最终 Runtime 的 `plugins/disabled/` 有 15 个插件：
 
-只纳入以下六个 SMAC 模块：
+- `admin-sql-prefetch.smx`、`admin-sql-threaded.smx`、`sql-admin-manager.smx`；
+- `mapchooser.smx`、`nominations.smx`、`randomcycle.smx`、`rockthevote.smx`、`nextmap.smx`；
+- `reservedslots.smx`、`no-rushing.smx`、`l4d2_predicaments.smx`；
+- `l4d2_item_hint.smx`、`kills.smx`、`tank_witch_spawn_notify.smx`、`l4d_gear_transfer.smx`。
 
-- Core：`smac.smx`
-- Aimbot：`smac_aimbot.smx`
-- Commands：`smac_commands.smx`
-- ConVars：`smac_cvars.smx`
-- L4D2 Fixes：`smac_l4d2_fixes.smx`
-- Speedhack：`smac_speedhack.smx`
+`clear_dead_body.smx` 和 `l4dafkfix_deadbot.smx` 未进入 active Runtime。`Survivor Identity Fix + deadbot`、第二套 FF、SI、Tank、Witch、AntiRush、HUD、商城、货币或 Empty Restart 同时加载属于健康检查硬失败。
 
-不纳入未选定的 wallhack、autotrigger、CSS/HL2DM 专用模块等。当前受版本控制的 `cfg/sourcemod/smac.cfg` 明确设置：`smac_aimbot_ban 0`、`smac_anticmdspam_kick 0`。Speedhack 的项目验收目标是只记录/告警、不自动封禁；当前公开配置没有单独的 Speedhack action cvar，因此该行为必须通过实际运行日志和真人客户端测试确认，本文不把“warn-only”文字视为已通过证明。
+## SMAC 与安全边界
 
-## Mutant Tanks：146 类型
+只纳入 Core、Aimbot、Commands、ConVars、L4D2 Fixes、Speedhack 六个模块。公开配置关闭 Aimbot 自动封禁和命令垃圾自动踢；Speedhack 最终动作仍需以运行日志和真人测试确认。Command Buffer Fixer 固定 `2.11`。其他 packet、spray、InputKill、null CUserCmd、Ladder Crash 等修复在来源、许可证、gamedata 和当前游戏签名完整固定前保持延后，不以未知 `.smx` 或 `.so` 补齐。
 
-`data/mutant_tanks/mutant_tanks.cfg` 当前包含连续的 `Tank #1` 至 `Tank #146`，并有 146 个 `Tank Name`。顶层 `Type Range` 为 `1-146`。PvPvE 池配置为：
+## 明确延后
 
-- whitelist：`1-146`
-- 默认 blacklist：`41,61,97,122,123,128,145,146`
-- weights：`1-88:4,89-121:2,124-144:1,126:2`
-- normal 每章上限：`2`
+Hitsound、`firebulletsfix`、`l4d_rock_lagcomp`、`l4d2_null_cusercmd_fix`、changelevel/transition pair、Use Priority、Survivor Identity Fix、Tank Ceiling Fix、第三方地图修复、Accelerator 和其余 security patches 尚未同时满足作者来源、不可变 commit、许可证、SourceMod 1.12 编译或 gamedata 验证，因此不在当前生产清单中。
 
-黑名单和权重只影响 normal 随机池；管理员强制类型可绕过该随机黑名单。管理员菜单展示已配置的 1-146 类型并分页。Human Support 保留为 Mutant Tanks 原生路径，当前配置使用有限 `Human Ammo` 和 `Human Cooldown`，不使用无限弹药值或零冷却。
+## 最终生产快照
 
-## Playable Witch
-
-Playable Witch 使用 Left4DHooks 的 `L4D2_SpawnWitch` 创建真实 `witch` 实体，不把玩家伪装成 `m_zombieClass = 7`。当前公开配置为：
-
-- `pve_playable_witch_enable 1`
-- `pve_playable_witch_max 1`
-- `pve_playable_witch_random_chance 2.5`
-- Mouse1 攻击、Space 跳跃、E 短时狂暴；断线、死亡、换图、终局和切队路径负责清理实体与控制状态。
-
-商城购买、管理员入口和低概率随机入口彼此分开；普通 `!zclass` 只允许 Smoker、Boomer、Hunter、Spitter、Jockey、Charger，不提供 Witch 类别。
+2026-09-22 08:40:57 EDT 启动窗口：SourceMod `1.12.0.7253`，MetaMod plugins 5，SourceMod extensions 12，active/disabled `.smx` 为 77/15。`l4d2ctl health` PASS；当前窗口未发现 Cbuf、KeyValues、Bad Load、Missing Native、signature 或 gamedata 错误。
 
 ## 验证边界
 
-静态检查、SourcePawn 编译、隔离安装、服务端 RCON、Bot 和实体/native 自检不能替代真实 Steam 客户端。当前文档不声称 1/4/8/12/16 名真人并发、真人 Tank/Witch 控制、Human Support、镜头/输入、断线回退、最终章或换图流程已经通过；这些仍需真人联机验收。
-
-## 明确不安装
-
-不安装 RPG、等级/经验/转生、永久属性、Gun XP、重复积分数据库、强制反伤、自动复活和未经作者确认的随机二进制。
+隔离构建已证明固定依赖可下载、校验和编译，但插件加载不等于真人玩法或性能通过。Friendly Fire、预留位、换队、Tank Rock、Witch、Finale、第三方地图、12 人和 16 人仍需真实 Steam 客户端；当前状态为 `NOT HUMAN VERIFIED`，且 `NOT VERIFIED WITH 16 HUMAN CLIENTS`。

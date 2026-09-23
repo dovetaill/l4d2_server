@@ -42,15 +42,15 @@ public Plugin myinfo =
 
 public void OnPluginStart()
 {
-    g_cvSIHeal = CreateConVar("l4d2_rewards_si_heal", "1", "Permanent HP for a Special Infected kill.", FCVAR_NOTIFY, true, 0.0);
-    g_cvSIHeadshotHeal = CreateConVar("l4d2_rewards_si_headshot_heal", "1", "Permanent HP for a headshot Special Infected kill.", FCVAR_NOTIFY, true, 0.0);
-    g_cvWitchHeal = CreateConVar("l4d2_rewards_witch_heal", "1", "Permanent HP for killing a Witch.", FCVAR_NOTIFY, true, 0.0);
-    g_cvWitchCrownHeal = CreateConVar("l4d2_rewards_witch_crown_heal", "1", "Permanent HP for a one-shot Witch kill.", FCVAR_NOTIFY, true, 0.0);
-    g_cvTankHeal = CreateConVar("l4d2_rewards_tank_heal", "1", "Permanent HP for the last hit on a Tank.", FCVAR_NOTIFY, true, 0.0);
+    g_cvSIHeal = CreateConVar("l4d2_rewards_si_heal", "0", "Current-life HP for a Special Infected kill; 0 disables the heal.", FCVAR_NOTIFY, true, 0.0);
+    g_cvSIHeadshotHeal = CreateConVar("l4d2_rewards_si_headshot_heal", "0", "Current-life HP for a headshot Special Infected kill; 0 disables the heal.", FCVAR_NOTIFY, true, 0.0);
+    g_cvWitchHeal = CreateConVar("l4d2_rewards_witch_heal", "0", "Current-life HP for killing a Witch; 0 disables the heal.", FCVAR_NOTIFY, true, 0.0);
+    g_cvWitchCrownHeal = CreateConVar("l4d2_rewards_witch_crown_heal", "0", "Current-life HP for a one-shot Witch kill; 0 disables the heal.", FCVAR_NOTIFY, true, 0.0);
+    g_cvTankHeal = CreateConVar("l4d2_rewards_tank_heal", "0", "Current-life HP for the last hit on a Tank; 0 disables the heal.", FCVAR_NOTIFY, true, 0.0);
     g_cvSecondWindHealth = CreateConVar("l4d2_rewards_second_wind_health", "35", "HP after Second Wind against a Special Infected.", FCVAR_NOTIFY, true, 1.0);
     g_cvSecondWindTankHealth = CreateConVar("l4d2_rewards_second_wind_tank_health", "60", "HP after Second Wind against a Tank.", FCVAR_NOTIFY, true, 1.0);
     g_cvSecondWindCooldown = CreateConVar("l4d2_rewards_second_wind_cooldown", "5.0", "Seconds between Second Wind activations per player.", FCVAR_NOTIFY, true, 0.0);
-    g_cvMaxHealth = CreateConVar("l4d2_rewards_max_health", "0", "Maximum permanent HP granted by rewards; 0 means no cap.", FCVAR_NOTIFY, true, 0.0);
+    g_cvMaxHealth = CreateConVar("l4d2_rewards_max_health", "100", "Maximum current-life HP granted by rewards; reward health never persists across life or chapter.", FCVAR_NOTIFY, true, 1.0);
     g_cvLootLifetime = CreateConVar("l4d2_rewards_loot_lifetime", "75.0", "Seconds before Tank loot is removed.", FCVAR_NOTIFY, true, 1.0);
     g_cvRareLootChance = CreateConVar("l4d2_rewards_rare_loot_chance", "30", "Percent chance for a second rare Tank drop.", FCVAR_NOTIFY, true, 0.0, true, 100.0);
     g_cvMinigunLifetime = CreateConVar("l4d2_rewards_minigun_lifetime", "120.0", "Seconds before a deployed minigun is removed.", FCVAR_NOTIFY, true, 10.0);

@@ -3,6 +3,8 @@
 
 #include <sourcemod>
 #include <sdktools>
+#undef REQUIRE_PLUGIN
+#include <l4d2_pve_overdrive>
 
 #define TEAM_SURVIVOR 2
 #define TEAM_INFECTED 3
@@ -28,15 +30,13 @@ public Plugin myinfo =
     name = "L4D2 战役商城",
     author = "Codex",
     description = "战役内存积分商城，不提供永久成长",
-    version = "1.3.0",
+    version = "1.4.0",
     url = ""
 };
 
 ConVar g_hEnabled;
 ConVar g_hMaxPoints;
 ConVar g_hNotify;
-ConVar g_hCommonInterval;
-ConVar g_hCommonReward;
 ConVar g_hSpecialReward;
 ConVar g_hWitchReward;
 ConVar g_hTankReward;
@@ -50,10 +50,10 @@ ConVar g_hDirectAmmoMultiplier;
 ConVar g_hDirectAmmoMax;
 ConVar g_hDirectAmmoKillReward;
 ConVar g_hDirectAmmoKillMax;
+ConVar g_hOverdrivePrice;
 ConVar g_hItemPrices[MAX_SHOP_ITEMS];
 
 int g_iPoints[MAXPLAYERS + 1];
-int g_iCommonKills[MAXPLAYERS + 1];
 int g_iLimitedAmmoWeapon[MAXPLAYERS + 1];
 int g_iLimitedAmmoRemaining[MAXPLAYERS + 1];
 bool g_bLimitedAmmoShot[MAXPLAYERS + 1];
@@ -275,8 +275,6 @@ public void OnPluginStart()
     g_hEnabled = CreateConVar("l4d2_campaign_shop_enable", "1", "启用战役内存积分商城。", _, true, 0.0, true, 1.0);
     g_hMaxPoints = CreateConVar("l4d2_campaign_shop_max_points", "250", "单名玩家在一场战役中可持有的最大积分。", _, true, 0.0);
     g_hNotify = CreateConVar("l4d2_campaign_shop_notify", "1", "在聊天中显示积分奖励提示。", _, true, 0.0, true, 1.0);
-    g_hCommonInterval = CreateConVar("l4d2_campaign_shop_common_interval", "20", "获得一次普通感染者奖励所需的击杀数。", _, true, 1.0);
-    g_hCommonReward = CreateConVar("l4d2_campaign_shop_common_reward", "0", "每个普通感染者奖励阶段给予的积分。", _, true, 0.0);
     g_hSpecialReward = CreateConVar("l4d2_campaign_shop_special_reward", "1", "击杀特殊感染者给予的积分。", _, true, 0.0);
     g_hWitchReward = CreateConVar("l4d2_campaign_shop_witch_reward", "2", "击杀女巫给予的积分。", _, true, 0.0);
     g_hTankReward = CreateConVar("l4d2_campaign_shop_tank_reward", "3", "击杀坦克给予的积分。", _, true, 0.0);
@@ -290,6 +288,7 @@ public void OnPluginStart()
     g_hDirectAmmoMax = CreateConVar("l4d2_campaign_shop_direct_ammo_max", "250", "直接购买燃烧弹或高爆弹时的最大特殊弹药数。", _, true, 1.0, true, 999.0);
     g_hDirectAmmoKillReward = CreateConVar("l4d2_campaign_shop_direct_ammo_kill_reward", "1", "每次特感击杀返还的最少有限升级弹数量。", _, true, 0.0);
     g_hDirectAmmoKillMax = CreateConVar("l4d2_campaign_shop_direct_ammo_kill_max", "20", "每次特感击杀返还的最多有限升级弹数量。", _, true, 1.0, true, 20.0);
+    g_hOverdrivePrice = CreateConVar("l4d2_campaign_shop_price_overdrive", "80", "15 秒临时 Overdrive 的战役积分价格。", _, true, 0.0);
 
     char priceCvar[64], priceDefault[16], priceDescription[128];
     for (int i = 0; i < MAX_SHOP_ITEMS; i++)
@@ -316,7 +315,6 @@ public void OnPluginStart()
 
     HookEvent("weapon_fire", Event_WeaponFire, EventHookMode_Post);
     HookEvent("player_death", Event_PlayerDeath, EventHookMode_Post);
-    HookEvent("infected_death", Event_InfectedDeath, EventHookMode_Post);
     HookEvent("witch_killed", Event_WitchKilled, EventHookMode_Post);
     HookEvent("revive_success", Event_ReviveSuccess, EventHookMode_Post);
     HookEvent("defibrillator_used", Event_DefibrillatorUsed, EventHookMode_Post);
@@ -348,7 +346,6 @@ public void OnMapStart()
 public void OnClientPutInServer(int client)
 {
     g_iPoints[client] = 0;
-    g_iCommonKills[client] = 0;
     ResetLimitedAmmoState(client);
 }
 
@@ -360,7 +357,6 @@ public void OnClientPostAdminCheck(int client)
 public void OnClientDisconnect(int client)
 {
     g_iPoints[client] = 0;
-    g_iCommonKills[client] = 0;
     ResetLimitedAmmoState(client);
 }
 
@@ -399,6 +395,10 @@ void ShowShop(int client)
     Format(title, sizeof(title), "战役商城｜积分：%d", g_iPoints[client]);
     menu.SetTitle(title);
 
+    char overdrive[96];
+    Format(overdrive, sizeof(overdrive), "Overdrive（15 秒）- %d 积分", g_hOverdrivePrice.IntValue);
+    menu.AddItem("overdrive", overdrive);
+
     char info[16];
     for (int category = 0; category < SHOP_CATEGORY_COUNT; category++)
     {
@@ -416,7 +416,18 @@ public int MenuHandler_Category(Menu menu, MenuAction action, int client, int it
     {
         char info[16];
         menu.GetItem(item, info, sizeof(info));
-        ShowShopCategory(client, StringToInt(info));
+        if (StrEqual(info, "overdrive"))
+        {
+            BuyOverdrive(client);
+            if (IsRealSurvivor(client))
+            {
+                ShowShop(client);
+            }
+        }
+        else
+        {
+            ShowShopCategory(client, StringToInt(info));
+        }
     }
     else if (action == MenuAction_End)
     {
@@ -475,6 +486,35 @@ public int MenuHandler_BuyCategory(Menu menu, MenuAction action, int client, int
         delete menu;
     }
     return 0;
+}
+
+void BuyOverdrive(int client)
+{
+    if (!IsRealSurvivor(client) || !IsPlayerAlive(client))
+    {
+        PrintToChat(client, "\x04[商城]\x01 只有存活的真人 Survivor 可以购买 Overdrive。");
+        return;
+    }
+    if (GetFeatureStatus(FeatureType_Native, "L4D2PveOverdrive_IsAvailable") != FeatureStatus_Available
+        || !L4D2PveOverdrive_IsAvailable())
+    {
+        PrintToChat(client, "\x04[商城]\x01 Overdrive 当前不可用，本次不扣除积分。");
+        return;
+    }
+    int price = g_hOverdrivePrice.IntValue;
+    if (g_iPoints[client] < price)
+    {
+        PrintToChat(client, "\x04[商城]\x01 积分不足，需要 %d，当前 %d。", price, g_iPoints[client]);
+        return;
+    }
+    if (!L4D2PveOverdrive_Activate(client))
+    {
+        float cooldown = L4D2PveOverdrive_GetCooldownRemaining(client);
+        PrintToChat(client, "\x04[商城]\x01 Overdrive 已生效或仍在冷却（%.1f 秒），本次不扣除积分。", cooldown);
+        return;
+    }
+    g_iPoints[client] -= price;
+    PrintToChat(client, "\x04[商城]\x01 已购买 Overdrive，花费 %d 积分。剩余积分：%d。", price, g_iPoints[client]);
 }
 
 void BuyItem(int client, int item)
@@ -716,11 +756,6 @@ public void Event_PlayerDeath(Event event, const char[] name, bool dontBroadcast
     }
 }
 
-public void Event_InfectedDeath(Event event, const char[] name, bool dontBroadcast)
-{
-    // Common infected kills intentionally grant neither points nor upgrade ammo.
-}
-
 public void Event_WitchKilled(Event event, const char[] name, bool dontBroadcast)
 {
     int attacker = ResolveEventClient(event, "userid");
@@ -855,7 +890,6 @@ void ResetPoints()
     for (int i = 1; i <= MaxClients; i++)
     {
         g_iPoints[i] = 0;
-        g_iCommonKills[i] = 0;
         g_bLimitedAmmoShot[i] = false;
     }
     ApplyAdminPointsToConnected();

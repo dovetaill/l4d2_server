@@ -4,7 +4,7 @@
 
 ## 自研插件
 
-当前项目维护并编译 13 个自研 SourceMod 插件。第三方插件、SourceMod 基础插件和运行依赖不在下表中，详见 [`docs/PLUGIN_MANIFEST.md`](docs/PLUGIN_MANIFEST.md)。
+当前项目维护并编译 20 个自研 SourceMod 插件。第三方插件、SourceMod 基础插件和运行依赖不在下表中，详见 [`docs/PLUGIN_MANIFEST.md`](docs/PLUGIN_MANIFEST.md)。运行时唯一所有者矩阵见 [`docs/RUNTIME_OWNERSHIP.md`](docs/RUNTIME_OWNERSHIP.md)，性能基线见 [`docs/PERFORMANCE_BASELINE.md`](docs/PERFORMANCE_BASELINE.md)。
 
 | 标题 | 功能 | 链接（自研） |
 |---|---|---|
@@ -13,14 +13,21 @@
 | L4D2 Clear Thirdstrike | 使用药丸或肾上腺素时减少一次倒地次数，最低保持为配置的下限。 | [`l4d2_clear_thirdstrike.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_clear_thirdstrike.sp) |
 | L4D2 Combat Rewards | 提供战役内战斗回血、Second Wind、Tank 战利品和可部署机枪奖励。 | [`l4d2_combat_rewards.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_combat_rewards.sp) |
 | L4D2 Incap Support | 玩家倒地后允许受控移动，并可使用药丸或肾上腺素进行自救。 | [`l4d2_incap_support.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_incap_support.sp) |
-| L4D2 End Safearea Teleport | 章节结束时经过宽限时间，将仍存活但落后的幸存者传送到最终安全区。 | [`l4d2_end_safearea_teleport.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_end_safearea_teleport.sp) |
-| L4D2 PvE Admin | 提供 PvE 管理员菜单和命令，用于玩家、装备、积分、Witch 及 Mutant Tank 测试控制。 | [`l4d2_pve_admin.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp) |
+| L4D2 Safearea Owner | 负责每章随机开门员、最终安全区 70% 团队 Gate 和 60 秒防卡关传送。 | [`l4d2_end_safearea_teleport.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_end_safearea_teleport.sp) |
+| L4D2 PvE Admin | 提供只读状态页和受控管理入口；生产默认禁止直接刷 SI、Tank、Witch 或清实体。 | [`l4d2_pve_admin.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_admin.sp) |
 | L4D2 PvE Chinese Help Menu | 提供面向玩家的中文 PvE/PvPvE 开始菜单、指令帮助和欢迎提示。 | [`l4d2_pve_help_menu.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_help_menu.sp) |
-| L4D2 PvE Infected Core | 实现战役 PvPvE 队伍切换、真人普通特感、积分、Tank 抽签和 HUD 状态显示。 | [`l4d2_pve_infected_core.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_infected_core.sp) |
-| L4D2 Switch Upgrade Ammo | 支持 Shift+Reload 切换升级弹药，并按配置持续补充燃烧弹和爆炸弹。 | [`l4d2_switch_upgrade_ammo.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_switch_upgrade_ammo.sp) |
+| L4D2 PvE Infected Core | 实现战役 PvPvE 队伍切换、真人普通特感、感染者积分和自然 Tank 抽签；不再生成 Tank 或刷新全局 HUD。 | [`l4d2_pve_infected_core.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_infected_core.sp) |
+| L4D2 Switch Upgrade Ammo | 支持 Shift+Reload 切换升级弹药，使用事件驱动补给而非永久高频 Timer。 | [`l4d2_switch_upgrade_ammo.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_switch_upgrade_ammo.sp) |
 | L4D2 PvE Damage Display | 向攻击者显示 PvE 伤害提示，并提供 Tank 伤害排行。 | [`l4d2_pve_damage_display.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_damage_display.sp) |
 | L4D2 Playable Witch | 基于真实 Witch 实体提供玩家控制、镜头、移动、攻击、跳跃和短时狂暴。 | [`l4d2_playable_witch.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_playable_witch.sp) |
 | L4D2 PvE Mutant Tank Pool | 校验 Mutant Tanks 的 146 个类型，提供加权随机池、黑白名单和章节计数。 | [`l4d2_pve_mutant_tanks.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_mutant_tanks.sp) |
+| L4D2 PvE Director Controller | 按 Recovery/Normal/Pressure 计算 SI 目标、间隔和职业权重，只写 InfectedBots 策略，不生成实体。 | [`l4d2_pve_director_controller.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_director_controller.sp) |
+| L4D2 PvE AntiRush | 使用 Left4DHooks 地图 Flow、中位数和安全锚点执行警告、传送及战役积分扣除。 | [`l4d2_pve_antirush.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_antirush.sp) |
+| L4D2 PvE Server HUD | 以 1 秒周期显示人数、SI、Flow、Tank/Witch、Profile、击杀、开门员与 AntiRush 状态。 | [`l4d2_pve_server_hud.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_server_hud.sp) |
+| L4D2 PvE Performance Guard | 低频监测实体风险并提供 `!pveperf`；只告警或请求 Director 临时 Recovery，不删除未知实体。 | [`l4d2_pve_perf_guard.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_perf_guard.sp) |
+| L4D2 PvE Corpse Cleaner | 事件驱动清理死亡 Common Infected；默认不清 Survivor、SI、Tank 或 Witch 尸体。 | [`l4d2_pve_corpse_cleaner.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_corpse_cleaner.sp) |
+| L4D2 PvE Overdrive | 通过 WeaponHandling API 提供单局 15 秒临时强化，并在死亡、切队、断线、换图和卸载时恢复倍率。 | [`l4d2_pve_overdrive.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_pve_overdrive.sp) |
+| L4D2 Restart Empty | 服务器曾有真人且最后一名真人离开 90 秒后正常退出，由 systemd 拉起；最短间隔 1 小时。 | [`l4d2_restart_empty.sp`](server/left4dead2/addons/sourcemod/scripting/l4d2_restart_empty.sp) |
 
 ## 目录与服务
 
@@ -53,13 +60,17 @@ connect <服务器公网IP>:27015
 | 返回幸存者 | `!survivor`、`!人类` |
 | 普通特感选择 | `!zclass`、`!特感选择` |
 | Tank 抽签 | `!tankqueue`、`!notank` |
+| Witch 抽签 | `!witchqueue`、`!nowitch` |
+| HUD 开关 | `!hud` |
+| 临时 Overdrive | `!overdrive`，或从商城购买 |
+| 性能状态 | `!pveperf` |
 | 管理员菜单 | `!admin` |
 
-普通特感选择只包含 Smoker、Boomer、Hunter、Spitter、Jockey 和 Charger。Witch 不属于普通 `!zclass` 菜单，只能通过商城、管理员流程或低概率随机流程获得。
+普通特感选择只包含 Smoker、Boomer、Hunter、Spitter、Jockey 和 Charger。Witch 不属于普通 `!zclass` 菜单，只能通过商城、管理员流程或每章一次的可选抽签获得。Hitsound 的 `!snd` 仍是延后候选，在作者源码、声音资源和职责冲突完成固定前不对外宣称可用。
 
 ## Playable Witch
 
-Playable Witch 控制的是由 `L4D2_SpawnWitch` 创建的真实 Witch 实体，不把玩家伪装成 `m_zombieClass = 7`。默认同时最多 1 名真人 Witch，每名玩家每章默认最多购买 1 次。
+Playable Witch 控制的是由 `L4D2_SpawnWitch` 创建的真实 Witch 实体，不把玩家伪装成 `m_zombieClass = 7`。默认同时最多 1 名真人 Witch；章节免费抽签默认概率 35%，只在地图 Flow 25% 至 80% 之间触发，每章最多一次。
 
 - Mouse1：近距离攻击。
 - Space：跳跃。
@@ -89,7 +100,7 @@ sm_pvewitch_validate
 sm_pvewitch_selftest
 ```
 
-`sm_pvetank` 可让自己或目标玩家成为任意有效的 Mutant Tanks 类型。菜单必须分页显示全部 146 个有效类型；管理员强制类型可以选择默认随机池排除的惩罚、测试、Slacker、Rusher 等类型。管理员测试、商城购买和正常随机 Tank 使用独立计数。
+生产配置 `l4d2_pve_admin_gameplay_write_enable 0`，因此管理员菜单默认只查看 Director、AntiRush、HUD、Witch Lottery、Overdrive、Performance、Corpse Cleaner、Reserved Slots、RestartEmpty 和 Safearea 状态。直接刷 SI/Tank/Witch、清实体、强制尸潮和接管 Tank 的维护入口默认关闭，避免形成第二个 Gameplay Owner。
 
 ## 网页面板
 
@@ -144,6 +155,8 @@ sm plugins list
 验收目标：`Failed = 0`、`Bad Load = 0`、`missing native = 0`、`missing gamedata = 0`、`Cbuf_AddText: buffer overflow = 0`、`KeyValues Error = 0`。
 
 32 位 L4D2 使用 `addons/metamod/bin/server.so` 和 `addons/metamod.vdf`。发布安装时必须禁用会尝试加载 64 位模块的 `addons/metamod_x64.vdf`，但不得删除 `bin/linux64/server.so` 或正常工作的 32 位文件。修复后以 `meta list` 和新启动日志确认不再出现错误的 x64 VDF 探测。
+
+最终生产快照（2026-09-22 08:40:57 EDT）：SourceMod `1.12.0.7253`，MetaMod plugins 5，SourceMod extensions 12，active/disabled `.smx` 为 77/15；`l4d2ctl health` PASS。该结论只覆盖启动、加载、配置和 Owner 边界，真人玩法与性能状态见测试报告。
 
 ## 测试边界
 

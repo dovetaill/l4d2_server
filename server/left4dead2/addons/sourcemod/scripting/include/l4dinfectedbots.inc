@@ -42,6 +42,15 @@ native int L4DInfectedBots_GetConfigInt(const char[] key);
 native float L4DInfectedBots_GetConfigFloat(const char[] key);
 
 /**
+ * Atomically update InfectedBots policy without spawning entities directly.
+ * InfectedBots remains the sole SI spawn executor.
+ *
+ *  1 on success.
+ */
+native int L4DInfectedBots_SetDynamicPolicy(int maxSpecials, float spawnTimeMin, float spawnTimeMax,
+    int smokerWeight, int boomerWeight, int hunterWeight, int spitterWeight, int jockeyWeight, int chargerWeight);
+
+/**
  * Query string configuration values from l4dinfectedbots plugin's current settings.
  *
  * @param key    Configuration key name
@@ -74,5 +83,6 @@ public void __pl_l4dinfectedbots_SetNTVOptional()
 	MarkNativeAsOptional("L4DInfectedBots_GetConfigInt");
 	MarkNativeAsOptional("L4DInfectedBots_GetConfigFloat");
 	MarkNativeAsOptional("L4DInfectedBots_GetConfigString");
+	MarkNativeAsOptional("L4DInfectedBots_SetDynamicPolicy");
 }
 #endif

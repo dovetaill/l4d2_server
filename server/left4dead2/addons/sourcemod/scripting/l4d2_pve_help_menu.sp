@@ -11,7 +11,7 @@ public Plugin myinfo =
     name = "L4D2 PvE Chinese Help Menu",
     author = "Codex",
     description = "Player-visible Chinese PvE/PvPvE start menu and command help.",
-    version = "1.0.0",
+    version = "1.1.0",
     url = ""
 };
 
@@ -63,8 +63,22 @@ public void OnClientPutInServer(int client)
 {
     if (g_cvWelcome.BoolValue && !IsFakeClient(client))
     {
+        RestartAnnouncementTimer();
         CreateTimer(g_cvWelcomeDelay.FloatValue, Timer_Welcome, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
     }
+}
+
+public void OnClientDisconnect(int client)
+{
+    if (!IsFakeClient(client))
+    {
+        RequestFrame(Frame_RefreshAnnouncementTimer);
+    }
+}
+
+public void Frame_RefreshAnnouncementTimer(any data)
+{
+    RestartAnnouncementTimer();
 }
 
 public Action Timer_Welcome(Handle timer, int userid)
@@ -87,7 +101,7 @@ void RestartAnnouncementTimer()
         g_hAnnouncementTimer = null;
     }
     g_iAnnouncementIndex = 0;
-    if (g_cvEnabled.BoolValue && g_cvAnnounceInterval.FloatValue > 0.0)
+    if (g_cvEnabled.BoolValue && g_cvAnnounceInterval.FloatValue > 0.0 && CountRealClients() > 0)
     {
         g_hAnnouncementTimer = CreateTimer(g_cvAnnounceInterval.FloatValue, Timer_AnnounceHelp, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
     }
@@ -95,6 +109,11 @@ void RestartAnnouncementTimer()
 
 public Action Timer_AnnounceHelp(Handle timer)
 {
+    if (CountRealClients() == 0)
+    {
+        g_hAnnouncementTimer = null;
+        return Plugin_Stop;
+    }
     if (!g_cvEnabled.BoolValue)
     {
         return Plugin_Continue;
@@ -143,6 +162,11 @@ void ShowMainMenu(int client)
     menu.AddItem("zclass", "选择普通特感职业（!zclass）");
     menu.AddItem("tankqueue", "加入 Tank 抽签（!tankqueue）");
     menu.AddItem("notank", "退出 Tank 抽签（!notank）");
+    menu.AddItem("witchqueue", "加入 Witch 抽签（!witchqueue）");
+    menu.AddItem("nowitch", "退出 Witch 抽签（!nowitch）");
+    menu.AddItem("hud", "切换全局 HUD（!hud）");
+    menu.AddItem("overdrive", "查看 Overdrive（!overdrive）");
+    menu.AddItem("pveperf", "查看性能状态（!pveperf）");
     menu.AddItem("details", "查看玩法与按键说明");
     menu.AddItem("commands", "查看全部中文指令");
 
@@ -184,6 +208,26 @@ public int MenuHandler_Main(Menu menu, MenuAction action, int client, int item)
         else if (StrEqual(info, "notank"))
         {
             FakeClientCommand(client, "sm_notank");
+        }
+        else if (StrEqual(info, "witchqueue"))
+        {
+            FakeClientCommand(client, "sm_witchqueue");
+        }
+        else if (StrEqual(info, "nowitch"))
+        {
+            FakeClientCommand(client, "sm_nowitch");
+        }
+        else if (StrEqual(info, "hud"))
+        {
+            FakeClientCommand(client, "sm_hud");
+        }
+        else if (StrEqual(info, "overdrive"))
+        {
+            FakeClientCommand(client, "sm_overdrive");
+        }
+        else if (StrEqual(info, "pveperf"))
+        {
+            FakeClientCommand(client, "sm_pveperf");
         }
         else if (StrEqual(info, "details"))
         {
@@ -320,10 +364,12 @@ void SetDefaultHelpContent()
     strcopy(g_sDetails[1], HELP_TEXT_LENGTH, "幸存者推进地图，感染者可由真人加入");
     strcopy(g_sDetails[2], HELP_TEXT_LENGTH, "H：默认打开服务器中文帮助页");
     strcopy(g_sDetails[3], HELP_TEXT_LENGTH, "Shift + Reload：有第二把主武器时切换武器，否则切换升级弹");
-    strcopy(g_sDetails[4], HELP_TEXT_LENGTH, "燃烧/爆炸升级包：特殊弹药和当前弹匣不消耗");
-    strcopy(g_sDetails[5], HELP_TEXT_LENGTH, "商城单独购买升级弹：数量有限，特感击杀随机返还 1-20 发");
-    strcopy(g_sDetails[6], HELP_TEXT_LENGTH, "击杀普通感染者不增加积分");
-    strcopy(g_sDetails[7], HELP_TEXT_LENGTH, "特感击杀只增加 1 点生命值，生命值不设上限");
+    strcopy(g_sDetails[4], HELP_TEXT_LENGTH, "幸存者之间无队友伤害，不使用反伤或扣除攻击者生命");
+    strcopy(g_sDetails[5], HELP_TEXT_LENGTH, "积分只在当前战役有效，不保存永久等级或 RPG 属性");
+    strcopy(g_sDetails[6], HELP_TEXT_LENGTH, "Tank 与 Witch 采用候选队列抽签；可随时退出抽签");
+    strcopy(g_sDetails[7], HELP_TEXT_LENGTH, "AntiRush 先警告，再安全传送并扣除少量本局积分");
+    strcopy(g_sDetails[8], HELP_TEXT_LENGTH, "Overdrive 是商城购买的 15 秒临时 WeaponHandling 强化");
+    strcopy(g_sDetails[9], HELP_TEXT_LENGTH, "普通感染者尸体快速清理；幸存者尸体不会自动清理");
 
     strcopy(g_sCommands[0], HELP_TEXT_LENGTH, "!菜单 / !pvehelp：打开开始菜单");
     strcopy(g_sCommands[1], HELP_TEXT_LENGTH, "!buy / !shop：打开商城");
@@ -333,6 +379,23 @@ void SetDefaultHelpContent()
     strcopy(g_sCommands[5], HELP_TEXT_LENGTH, "!zclass / !特感选择：选择普通特感");
     strcopy(g_sCommands[6], HELP_TEXT_LENGTH, "!tankqueue：加入 Tank 抽签");
     strcopy(g_sCommands[7], HELP_TEXT_LENGTH, "!notank：退出 Tank 抽签");
+    strcopy(g_sCommands[8], HELP_TEXT_LENGTH, "!witchqueue / !nowitch：加入 / 退出 Witch 抽签");
+    strcopy(g_sCommands[9], HELP_TEXT_LENGTH, "!hud：切换个人全局 HUD 显示");
+    strcopy(g_sCommands[10], HELP_TEXT_LENGTH, "!overdrive：查看临时强化与冷却状态");
+    strcopy(g_sCommands[11], HELP_TEXT_LENGTH, "!pveperf：查看 Entity、SI、Common 与风险级别");
+}
+
+int CountRealClients()
+{
+    int count;
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        if (IsClientInGame(client) && !IsFakeClient(client))
+        {
+            count++;
+        }
+    }
+    return count;
 }
 
 public int MenuHandler_Info(Menu menu, MenuAction action, int client, int item)

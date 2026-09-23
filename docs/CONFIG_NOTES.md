@@ -1,87 +1,79 @@
 # 配置说明
 
-状态日期：2026-09-21。
+状态日期：2026-09-22。
 
-本文记录当前源码仓库中公开配置的所有权、关键值和验证边界。生产密码、GSLT、RCON、网页认证、SQLite 和日志不在这些文件中。
+本文记录源码仓库中的公开默认值。源码工程位于 `/home/wwwroot/l4d2`，Runtime 位于 `/opt/l4d2`，实际游戏位于 `/opt/l4d2/server/left4dead2`；三者不得混用。密码、GSLT、RCON、网页认证和私密环境变量不进入 Git。
 
-## 系统所有权
+## Owner 与关键默认值
 
-| 系统 | 唯一所有者 | 公开配置/代码位置 |
+| 系统 | 唯一 Owner | 默认值 |
 |---|---|---|
-| SI 数量/波次 | InfectedBots | `cfg/sourcemod/l4dinfectedbots.cfg` 与 `data/l4dinfectedbots/` |
-| SI AI | AI_HardSI | `cfg/sourcemod/AI_HardSI.cfg` |
-| 普通感染者缩放 | Dynamic Infected Spawn Balancer | `cfg/sourcemod/l4d2_balancer_spawn_dyn.cfg` |
-| Tank HP/能力/Human Support | Mutant Tanks 9.3 | `data/mutant_tanks/mutant_tanks.cfg` |
-| PvPvE Tank 池 | `l4d2_pve_mutant_tanks.smx` | `cfg/sourcemod/l4d2_pve_mutant_tanks.cfg` |
-| Friendly Fire | No Friendly-Fire | `cfg/sourcemod/no_friendly-fire.cfg` |
-| 积分/商城 | `l4d2_campaign_shop.smx` | `cfg/sourcemod/l4d2_campaign_shop.cfg` |
-| Witch 实体控制 | `l4d2_playable_witch.smx` | `cfg/sourcemod/l4d2_playable_witch.cfg` |
-| 奖励、Second Wind、loot | `l4d2_combat_rewards.smx` | `cfg/sourcemod/l4d2_combat_rewards.cfg` |
+| SI Spawn | InfectedBots `3.0.8-pve.1` | `max_specials=12`、`spawn_same_frame=0`、`coordination=0`；Tank/Witch spawn off |
+| SI Policy | `l4d2_pve_director_controller` | evaluate 5s；Normal target `5/8/10/12`；hard cap 12；headroom 2 |
+| Common | Dynamic Infected Spawn Balancer | SI/Dominator/interval/Tank/Tank HP/versus-like `0/0/0/0/0/0`；Common `0.222` |
+| AntiRush | `l4d2_pve_antirush` | 1s；warning max(1000,10%)/6s；severe max(1300,15%)/10s；扣 15/30 分 |
+| Global HUD | `l4d2_pve_server_hud` | 1s；空服暂停；黑白只在状态变化时通知 |
+| Friendly Fire | No Friendly-Fire 10.0 | guns/melee/fires/explosions=`1`；无反伤 |
+| Reserved slots | `l4d_reservedslots 1.8-pve.1` | public 12；admin reserved 1；hidden 1；`ADMFLAG_RESERVATION` |
+| Loading timeout | `l4d_kickloadstuckers 1.3-pve.1` | 普通 120s；reservation 管理员 180s |
+| Corpse cleanup | `l4d2_pve_corpse_cleaner` | 只清 dead common，1.0s；Survivor/SI/Tank/Witch 不清 |
+| Entity diagnostics | `l4d2_pve_perf_guard` | sample 5s；WARN 1600；CRITICAL 1800；Recovery request 1850；日志间隔 30s |
+| Overdrive | `l4d2_pve_overdrive` + WeaponHandling | 15s；cooldown 75s；fire 1.12/reload 1.15/deploy 1.10/melee 1.08/item 1.05 |
+| Witch lottery | `l4d2_playable_witch` | 35%；Flow 25%-80%；每章最多 1 次；同时最多 1 人 |
+| Safearea | `l4d2_end_safearea_teleport` | opener timeout 120s；final gate 70%；near 600；grace teleport 60s |
+| Empty restart | `l4d2_restart_empty` + systemd | 曾有真人后归零；grace 90s；最短间隔 3600s；`Restart=always`/5s |
 
-不要为同一系统再添加第二个所有者或第二套积分/MT 类型解析器。
+`server.cfg` 在最终配置阶段显式执行 `sourcemod/l4d2_balancer_spawn_dyn.cfg`，避免 AutoExecConfig 时序恢复默认值；`l4d2ctl health` 同时核对文件和六个在线 CVar。
 
-## Mutant Tanks 146 池
+## Slot Budget
 
-真实类型配置是 `addons/sourcemod/data/mutant_tanks/mutant_tanks.cfg`，不是普通 SourceMod KeyValues 解析器生成的副本。静态检查结果如下：
-
-- `Tank #1` 至 `Tank #146` 连续存在。
-- `Tank Name` 共 146 个。
-- 顶层 `Type Range` 为 `1-146`。
-- 全局 Human Support 段的 `Human Cooldown` 为 `12`。
-- 当前显式 `Human Support = 1` 的类型段为 139 个；这不等同于声称每个类型都具有相同的人类技能配置。
-- `Human Ability` 取值为 `1` 或 `2`；`Human Ammo` 取值为 `1`、`2`、`3` 或 `5`；没有 `Human Ammo 99999`，也没有 `Human Cooldown 0`。
-
-PvPvE 池 `cfg/sourcemod/l4d2_pve_mutant_tanks.cfg` 当前为：
+公开配置为：
 
 ```text
-l4d2_pve_mt_pool_enable "1"
-l4d2_pve_mt_whitelist "1-146"
-l4d2_pve_mt_blacklist "41,61,97,122,123,128,145,146"
-l4d2_pve_mt_weights "1-88:4,89-121:2,124-144:1,126:2"
-l4d2_pve_mt_normal_per_chapter "2"
+sv_visiblemaxplayers 12
+sv_maxplayers 31
+pve_public_human_slots 12
+pve_admin_reserved_slots 1
+pve_admin_reserved_slots_hide 1
+l4d2_pve_director_engine_headroom 2
 ```
 
-whitelist、blacklist、weights 和 normal 每章上限只约束 normal 随机池；商城购买和管理员生成分别计数，管理员强制类型默认绕过随机 blacklist。`sm_pvemtvalidate` 负责 146 名称、边界、header 和随机池审计；`sm_pvemtstats` 负责 normal、purchased、admin 三类计数。
+预留位属于 MaxClients 预算，Director 还会扣除已连接客户端和至少 2 个安全 headroom。未来 16+1 通过配置调整，不在源码写死。管理员位只 Reserve，不随机踢人、不踢高 Ping、最后加入者或 AFK 玩家。
 
-## SMAC 安全边界
+## Friendly Fire
 
-当前受版本控制的 `cfg/sourcemod/smac.cfg` 只启用以下选定模块的配置范围：Core、Aimbot、Commands、ConVars、L4D2 Fixes、Speedhack。未纳入 wallhack、autotrigger、CSS/HL2DM 等未选模块。
-
-公开配置的关键值是：
+`cfg/sourcemod/no_friendly-fire.cfg`：
 
 ```text
-smac_ban_duration 0
-smac_aimbot_ban 0
-smac_anticmdspam_kick 0
+nff_enable 1
+nff_gamemodetypes 1
+nff_survivors 1
+nff_infected 1
+nff_blockguns 1
+nff_blockmelee 1
+nff_blockfires 1
+nff_blockexplosions 1
+nff_saferoomonly 0
 ```
 
-其中 `smac_aimbot_ban 0` 和 `smac_anticmdspam_kick 0` 明确关闭对应自动动作。项目目标是 Speedhack 只记录/告警、不自动永久封禁；当前公开 `smac.cfg` 没有单独的 Speedhack action cvar，所以不能仅凭这几行配置声称该目标已经由真人测试确认。Speedhack 的最终行为必须以实际运行日志和真人客户端验收为准。
+配置目标是只拦截 Survivor 对 Survivor 的枪、近战、火和爆炸伤害；不反伤攻击者。Tank/SI/Witch、环境 `trigger_hurt` 和必要 self damage 的最终行为仍需真人验证。
 
-## Playable Witch
+## Dynamic Director
 
-当前公开配置 `cfg/sourcemod/l4d2_playable_witch.cfg` 为：
+RECOVERY 在倒地人数至少 2、倒地比例至少 35% 或有效战斗 Survivor 至多 2 时降低目标并延长间隔；NORMAL 使用人数区间目标；PRESSURE 只在平均健康至少 75、无大量倒地/挂边/被控且 Flow spread 不高于 12% 时增加 1。它只写 InfectedBots CVar，不创建 SI、不杀现有 SI、不踢真人感染者。
 
-```text
-pve_playable_witch_enable "1"
-pve_playable_witch_max "1"
-pve_playable_witch_health "1600"
-pve_playable_witch_speed "235.0"
-pve_playable_witch_jump "285.0"
-pve_playable_witch_attack_damage "35.0"
-pve_playable_witch_attack_range "92.0"
-pve_playable_witch_attack_cooldown "0.85"
-pve_playable_witch_rage_speed "1.30"
-pve_playable_witch_rage_duration "4.0"
-pve_playable_witch_rage_cooldown "24.0"
-pve_playable_witch_random_chance "2.5"
-```
+## AntiRush
 
-模块使用 `L4D2_SpawnWitch` 创建真实 Witch 实体，不通过把玩家设置为 `m_zombieClass = 7` 来伪装。商城购买、管理员入口和随机入口分开管理；普通 `!zclass` 仍只有 Smoker、Boomer、Hunter、Spitter、Jockey、Charger。实体死亡、断线、换图、终局和切队路径必须清理控制状态并让玩家回到普通感染者 Ghost。
+使用 Left4DHooks Map Flow，中位数作为团队位置，35%-50% 分位的存活、未倒地、未挂边、未被控 Survivor 作为 teleport anchor。处罚为 warning、第二次 teleport+15 分、第三次及以后 teleport+30 分；不 Slay/Kick/Ban/Freeze，也不刷 SI 惩罚。Finale、救援、电梯、移动平台、单向跳、强制跑事件、Charger/Jockey 强制移动、仅 1-2 名有效 Survivor 和未知自定义图必须真人确认豁免/降级逻辑。
 
-## 其他公开 PvPvE 值
+## Corpse 与 Entity
 
-`cfg/sourcemod/pve_infected_balance.cfg` 当前的关键边界包括：真人感染者上限 `4`，换边冷却 `90` 秒，SI health multiplier `1.30`，SI cooldown multiplier `0.85`，Tank limit `1`，Witch purchase cost `150`，Witch random chance `2.5`。这些值是配置说明，不是多人验收结果。
+Cleaner 由 `infected_death` 驱动并在延迟后通过 EntityRef 复核，只删除死亡 common。它不遍历 2048 实体、不删除 Survivor death model、活体、武器、prop、任务实体、Tank 或 Witch。Perf Guard 只监测/告警并可请求 Director 临时 Recovery，不删除未知实体。已有 `clear_weapon_drop` 保持唯一掉落实体 Owner。
+
+## 管理员与帮助菜单
+
+`l4d2_pve_admin_gameplay_write_enable 0` 是生产默认值。管理员菜单提供 Director、AntiRush、HUD、Witch、Overdrive、Performance、Corpse、Slots、Restart 和 Safearea 状态，不提供强删所有实体或 Survivor corpse。帮助菜单只公开当前真实存在的 `!hud`、`!witchqueue`、`!nowitch`、`!overdrive`、`!pveperf` 等命令；`!snd`、`!pvevote`、`!nv` 未部署时不宣称可用。
 
 ## 验证边界
 
-静态配置检查、编译、隔离安装、服务端 RCON、Bot 和 native/entity 自检不能替代真实 Steam 客户端。本文不声称 1/4/8/12/16 名真人并发、真人 SI 六类选择、Tank 抽签/接管/断线、Mutant Tanks Human Support、Playable Witch 的 Mouse1/Space/E/镜头/死亡回 Ghost、最终章救援、换图或章节结算已经通过。没有真人客户端证据，不标记“真实多人通过”。
+上述 Owner、slot、Witch 和 Dynamic Balancer 默认值已在 2026-09-22 08:40:57 EDT 的生产启动窗口通过在线检查；Friendly Fire、预留位准入、换队、AntiRush、安全门、Tank/Witch、12/16 真人和性能 A/B 仍未由真实 Steam 客户端验证。

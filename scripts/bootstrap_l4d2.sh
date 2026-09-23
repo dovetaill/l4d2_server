@@ -411,6 +411,119 @@ disable_incompatible_runtime_entries() {
         mv -f "${GAME_DIR}/addons/sourcemod/plugins/nextmap.smx" \
             "${GAME_DIR}/addons/sourcemod/plugins/disabled/nextmap.smx"
     fi
+    # Stock reservedslots would create a second slot owner. The project uses
+    # the public l4d_reservedslots source with separate human admission Cvars.
+    if [[ -f "${GAME_DIR}/addons/sourcemod/plugins/reservedslots.smx" ]]; then
+        install -d "${GAME_DIR}/addons/sourcemod/plugins/disabled"
+        mv -f "${GAME_DIR}/addons/sourcemod/plugins/reservedslots.smx" \
+            "${GAME_DIR}/addons/sourcemod/plugins/disabled/reservedslots.smx"
+    fi
+    # InfectedBots 3.0.8 requires spawn_infected_nolimit as a low-level native.
+    # The project-owned build exposes no commands and only accepts calls from
+    # l4dinfectedbots.smx, so it is part of the same spawn Owner.
+    for base in no-rushing.smx l4d2_predicaments.smx clear_dead_body.smx l4dafkfix_deadbot.smx \
+        l4d2_item_hint.smx kills.smx tank_witch_spawn_notify.smx l4d_gear_transfer.smx; do
+        if [[ -f "${GAME_DIR}/addons/sourcemod/plugins/${base}" ]]; then
+            install -d "${GAME_DIR}/addons/sourcemod/plugins/disabled"
+            mv -f "${GAME_DIR}/addons/sourcemod/plugins/${base}" \
+                "${GAME_DIR}/addons/sourcemod/plugins/disabled/${base}"
+        fi
+    done
+}
+
+validate_runtime_ownership() {
+    local plugins="${GAME_DIR}/addons/sourcemod/plugins"
+    local required path pattern conflict public_slots reserved_slots
+    local -a required_plugins=(
+        no_friendly-fire.smx
+        l4d_reservedslots.smx
+        l4d_kickloadstuckers.smx
+        l4dinfectedbots.smx
+        spawn_infected_nolimit.smx
+        l4d2_pve_infected_core.smx
+        l4d2_playable_witch.smx
+        l4d2_pve_director_controller.smx
+        l4d2_pve_antirush.smx
+        l4d2_pve_server_hud.smx
+        l4d2_pve_corpse_cleaner.smx
+        WeaponHandling.smx
+        l4d2_pve_overdrive.smx
+        l4d2_restart_empty.smx
+    )
+    local -a conflict_patterns=(
+        'anti-friendly_fire*.smx'
+        'l4dffannounce*.smx'
+        'NekoSpecials*.smx'
+        'NekoVote*.smx'
+        'NekoKillHud*.smx'
+        'l4d2_boss_spawn*.smx'
+        'l4d2_si_spawn_control*.smx'
+        'l4d2_multi_witches*.smx'
+        'l4d2_auto_restart*.smx'
+        'restart_empty_server*.smx'
+        'no-rushing.smx'
+        'reservedslots.smx'
+        'clear_dead_body.smx'
+        'l4dafkfix_deadbot.smx'
+    )
+
+    for required in "${required_plugins[@]}"; do
+        [[ -f "${plugins}/${required}" ]] || die "Runtime Owner validation failed; missing ${required}."
+    done
+
+    for pattern in "${conflict_patterns[@]}"; do
+        conflict="$(find "${plugins}" -maxdepth 1 -type f -iname "${pattern}" -print -quit)"
+        [[ -z "${conflict}" ]] || die "Runtime Owner conflict remains enabled: ${conflict}"
+    done
+
+    if find "${plugins}" -maxdepth 1 -type f -iname '*survivor*identity*.smx' -print -quit | grep -q . \
+        && find "${plugins}" -maxdepth 1 -type f -iname '*deadbot*.smx' -print -quit | grep -q .; then
+        die "Runtime Owner conflict: Survivor Identity Fix and deadbot are both enabled."
+    fi
+
+    for path in \
+        "${GAME_DIR}/addons/sourcemod/gamedata/command_buffer.games.txt" \
+        "${GAME_DIR}/addons/sourcemod/gamedata/WeaponHandling.txt" \
+        "${GAME_DIR}/addons/sourcemod/gamedata/physics_object_pushfix.txt" \
+        "${GAME_DIR}/addons/sourcemod/gamedata/l4dinfectedbots.txt" \
+        "${GAME_DIR}/addons/sourcemod/gamedata/spawn_infected_nolimit.txt" \
+        "${GAME_DIR}/addons/sourcemod/gamedata/left4dhooks.l4d2.txt" \
+        "${GAME_DIR}/addons/sourcemod/scripting/include/left4dhooks.inc" \
+        "${GAME_DIR}/addons/sourcemod/scripting/include/weaponhandling.inc"; do
+        [[ -f "${path}" ]] || die "Required runtime dependency is missing: ${path}"
+    done
+
+    for pattern in \
+        sm_infected_balancer_si_general_power \
+        sm_infected_balancer_si_dominator_power \
+        sm_infected_balancer_spawn_interval_power \
+        sm_infected_balancer_tank_balance \
+        sm_infected_balancer_tank_increase_hp_percent \
+        sm_infected_balancer_versus_like; do
+        grep -Eq "^${pattern}[[:space:]]+\"?0\"?([[:space:]]|$)" \
+            "${GAME_DIR}/cfg/sourcemod/l4d2_balancer_spawn_dyn.cfg" \
+            || die "Dynamic Balancer Owner conflict: ${pattern} must be 0."
+    done
+
+    for pattern in tank_limit tank_spawn_probability witch_max_limit; do
+        grep -Eq "^[[:space:]]*\"${pattern}\"[[:space:]]+\"0\"" \
+            "${GAME_DIR}/addons/sourcemod/data/l4dinfectedbots/pve_pvpve.cfg" \
+            || die "InfectedBots Owner conflict: ${pattern} must be 0."
+    done
+    grep -Eq '^[[:space:]]*"spawn_same_frame"[[:space:]]+"0"' \
+        "${GAME_DIR}/addons/sourcemod/data/l4dinfectedbots/pve_pvpve.cfg" \
+        || die "InfectedBots spawn_same_frame must remain 0."
+
+    public_slots="$(awk '$1=="pve_public_human_slots"{gsub(/"/,"",$2); print $2}' \
+        "${GAME_DIR}/cfg/sourcemod/l4d_reservedslots.cfg")"
+    reserved_slots="$(awk '$1=="pve_admin_reserved_slots"{gsub(/"/,"",$2); print $2}' \
+        "${GAME_DIR}/cfg/sourcemod/l4d_reservedslots.cfg")"
+    [[ "${public_slots}" =~ ^(12|13|14|15|16)$ ]] \
+        || die "Invalid pve_public_human_slots: ${public_slots:-missing}"
+    [[ "${reserved_slots}" =~ ^[1-4]$ ]] \
+        || die "Invalid pve_admin_reserved_slots: ${reserved_slots:-missing}"
+
+    log "Runtime Owner validation passed before service startup."
 }
 
 install_steamcmd() {
@@ -494,31 +607,117 @@ install_frameworks() {
 
 
 
+find_vendor_package_root() {
+    local key="$1" package_name="${2:-}" root
+    if [[ -n "${package_name}" ]]; then
+        root="$(find "${TEMP_DIR}/${key}" -type d -name "${package_name}" -print -quit)"
+    else
+        root="$(find "${TEMP_DIR}/${key}" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+    fi
+    [[ -n "${root}" ]] || die "Required vendor package is missing: ${key}/${package_name:-archive-root}"
+    printf "%s\n" "${root}"
+}
+
+stage_vendor_package_companions() {
+    local key="$1" package_name="$2" root source_root directory overlay_sm
+    root="$(find_vendor_package_root "${key}" "${package_name}")"
+    overlay_sm="${TEMP_DIR}/vendor-overlay/addons/sourcemod"
+    install -d "${overlay_sm}" "${TEMP_DIR}/vendor-overlay/cfg"
+    for source_root in "${root}" "${root}/addons/sourcemod"; do
+        [[ -d "${source_root}" ]] || continue
+        for directory in gamedata data configs translations; do
+            if [[ -d "${source_root}/${directory}" ]]; then
+                install -d "${overlay_sm}/${directory}"
+                rsync -a "${source_root}/${directory}/" "${overlay_sm}/${directory}/"
+            fi
+        done
+        if [[ -d "${source_root}/scripting/include" ]]; then
+            install -d "${overlay_sm}/scripting/include"
+            rsync -a "${source_root}/scripting/include/" "${overlay_sm}/scripting/include/"
+        fi
+    done
+    if [[ -d "${root}/cfg" ]]; then
+        rsync -a "${root}/cfg/" "${TEMP_DIR}/vendor-overlay/cfg/"
+    fi
+}
+
+stage_vendor_named_file() {
+    local key="$1" package_name="$2" source_name="$3" destination="$4" root
+    local -a matches=()
+    root="$(find_vendor_package_root "${key}" "${package_name}")"
+    mapfile -t matches < <(find "${root}" -type f -name "${source_name}" -print)
+    (( ${#matches[@]} == 1 )) || die "Expected one vendor file ${key}/${package_name}/${source_name}; found ${#matches[@]}."
+    install -D -m 0644 "${matches[0]}" "${TEMP_DIR}/vendor-overlay/${destination}"
+}
+
 compile_vendor_plugin() {
-    local key="$1" source_name="$2" output_name="$3"
-    local source compiler temp_output compile_log
+    local key="$1" source_name="$2" output_name="$3" package_name="${4:-}"
+    local root source compiler temp_output compile_log overlay_include
+    local -a matches=()
     compiler="${GAME_DIR}/addons/sourcemod/scripting/spcomp"
-    source="$(find "${TEMP_DIR}/${key}" -type f -name "${source_name}" -print -quit)"
-    [[ -n "${source}" ]] || die "Required vendor source is missing: ${key}/${source_name}"
+    root="$(find_vendor_package_root "${key}" "${package_name}")"
+    mapfile -t matches < <(find "${root}" -type f -name "${source_name}" -print)
+    (( ${#matches[@]} == 1 )) || die "Expected one vendor source ${key}/${package_name}/${source_name}; found ${#matches[@]}."
+    source="${matches[0]}"
     [[ -x "${compiler}" ]] || die "SourcePawn compiler is missing: ${compiler}"
 
     install -d "${TEMP_DIR}/vendor-smx"
     temp_output="${TEMP_DIR}/vendor-smx/${output_name}"
     compile_log="${TEMP_DIR}/vendor-${output_name}.log"
+    overlay_include="${TEMP_DIR}/vendor-overlay/addons/sourcemod/scripting/include"
     if (cd "$(dirname "${source}")" && "${compiler}" \
-            -iinclude \
+            -i"${overlay_include}" \
             -i"${GAME_DIR}/addons/sourcemod/scripting/include" \
             "${source_name}" -o"${temp_output}") >"${compile_log}" 2>&1; then
+        if grep -Eiq '(^|[^a-z])warning([[:space:]]+[0-9]+|s?:)' "${compile_log}"; then
+            sed -n '1,160p' "${compile_log}" >&2
+            die "Vendor SourcePawn compilation emitted warnings: ${source_name}"
+        fi
         log "Staged vendor ${source_name} -> ${output_name}"
     else
-        sed -n '1,160p' "${compile_log}" >&2
+        sed -n "1,160p" "${compile_log}" >&2
         die "Vendor SourcePawn compilation failed: ${source_name}"
     fi
 }
 
 install_gameplay_packages() {
-    local key archive extract_root root package_dir plugin_dir base
-    local -a bundle_keys=(fbef_plugins wyxls_plugins dual_primary predicaments votekick no_friendly_fire smac multicolors)
+    local key archive extract_root package source_name output_name
+    local -a bundle_keys=(fbef_phase1 wyxls_plugins weapon_handling dual_primary votekick no_friendly_fire smac multicolors)
+    local -a fbef_packages=(
+        AI_HardSI cge_l4d2_deathcheck clear_weapon_drop fix_botkick
+        l4d2_assist l4d2_maptankfix l4d2_rescue_vehicle_multi
+        l4d2_tank_props_glow l4d_CreateSurvivorBot l4d_afk_commands
+        l4d_both_fixUpgradePack l4d_finale_stage_fix
+        l4d_full_slot_bot_replace_fix l4dmultislots
+    )
+    local -a fbef_plugins=(
+        "AI_HardSI|AI_HardSI.sp|AI_HardSI.smx"
+        "cge_l4d2_deathcheck|cge_l4d2_deathcheck.sp|cge_l4d2_deathcheck.smx"
+        "clear_weapon_drop|clear_weapon_drop.sp|clear_weapon_drop.smx"
+        "fix_botkick|fix_botkick.sp|fix_botkick.smx"
+        "l4d2_assist|l4d2_assist.sp|l4d2_assist.smx"
+        "l4d2_maptankfix|l4d2_maptankfix.sp|l4d2_maptankfix.smx"
+        "l4d2_rescue_vehicle_multi|l4d2_rescue_vehicle_multi.sp|l4d2_rescue_vehicle_multi.smx"
+        "l4d2_tank_props_glow|l4d2_tank_props_glow.sp|l4d2_tank_props_glow.smx"
+        "l4d_CreateSurvivorBot|l4d_CreateSurvivorBot.sp|l4d_CreateSurvivorBot.smx"
+        "l4d_afk_commands|l4d_afk_commands.sp|l4d_afk_commands.smx"
+        "l4d_both_fixUpgradePack|l4d_both_fixUpgradePack.sp|l4d_both_fixUpgradePack.smx"
+        "l4d_finale_stage_fix|l4d_finale_stage_fix.sp|l4d_finale_stage_fix.smx"
+        "l4d_full_slot_bot_replace_fix|l4d_full_slot_bot_replace_fix.sp|l4d_full_slot_bot_replace_fix.smx"
+        "l4dmultislots|l4dmultislots.sp|l4dmultislots.smx"
+    )
+    local -a vendor_outputs=(
+        AI_HardSI.smx cge_l4d2_deathcheck.smx clear_weapon_drop.smx fix_botkick.smx
+        l4d2_assist.smx l4d2_maptankfix.smx l4d2_rescue_vehicle_multi.smx
+        l4d2_tank_props_glow.smx l4d_CreateSurvivorBot.smx l4d_afk_commands.smx
+        l4d_both_fixUpgradePack.smx l4d_finale_stage_fix.smx
+        l4d_full_slot_bot_replace_fix.smx l4dmultislots.smx
+        Defib_Fix.smx
+        WeaponHandling.smx survivor_afk_fix.smx no_friendly-fire.smx
+        dual_primaries.smx l4d_votekick.smx smac.smx smac_aimbot.smx
+        smac_commands.smx smac_cvars.smx smac_l4d2_fixes.smx smac_speedhack.smx
+    )
+
     for key in "${bundle_keys[@]}"; do
         archive="${TEMP_DIR}/${key}.tar.gz"
         download_artifact "${key}" "${archive}"
@@ -527,50 +726,37 @@ install_gameplay_packages() {
         tar -xzf "${archive}" -C "${extract_root}"
     done
 
-    install -d "${GAME_DIR}/addons/sourcemod/plugins" \
-        "${GAME_DIR}/addons/sourcemod/gamedata" \
-        "${GAME_DIR}/addons/sourcemod/data" \
-        "${GAME_DIR}/addons/sourcemod/configs" \
-        "${GAME_DIR}/addons/sourcemod/translations" \
-        "${GAME_DIR}/addons/sourcemod/scripting/include" \
-        "${GAME_DIR}/cfg/sourcemod"
+    install -d "${TEMP_DIR}/vendor-overlay/addons/sourcemod/scripting/include" \
+        "${TEMP_DIR}/vendor-overlay/cfg/sourcemod" "${TEMP_DIR}/vendor-smx"
 
-    # These repositories publish each plugin as a complete package directory.
-    # Copy only runtime companions; README/images/source are not runtime input.
-    for key in fbef_plugins wyxls_plugins; do
-        while IFS= read -r -d '' plugin_dir; do
-            base="${plugin_dir%/plugins}"
-            case "${base}" in *BasicEnvs*) continue ;; esac
-            find "${plugin_dir}" -maxdepth 1 -type f -name '*.smx' -exec install -m 0644 {} "${GAME_DIR}/addons/sourcemod/plugins/" \;
-            for package_dir in gamedata data translations; do
-                [[ -d "${base}/${package_dir}" ]] && rsync -a "${base}/${package_dir}/" "${GAME_DIR}/addons/sourcemod/${package_dir}/"
-            done
-            [[ -d "${base}/scripting/include" ]] && rsync -a "${base}/scripting/include/" "${GAME_DIR}/addons/sourcemod/scripting/include/"
-            [[ -d "${base}/cfg" ]] && rsync -a "${base}/cfg/" "${GAME_DIR}/cfg/"
-            [[ -d "${base}/configs" ]] && rsync -a "${base}/configs/" "${GAME_DIR}/cfg/sourcemod/"
-        done < <(find "${TEMP_DIR}/${key}" -type d -name plugins -print0)
+    for package in "${fbef_packages[@]}"; do
+        stage_vendor_package_companions fbef_phase1 "${package}"
+    done
+    stage_vendor_package_companions wyxls_plugins l4d2_automatic_weapons
+    stage_vendor_package_companions smac ""
+
+    stage_vendor_named_file wyxls_plugins "(Must_Install) BasicEnvs" Defib_Fix.inc addons/sourcemod/scripting/include/Defib_Fix.inc
+    stage_vendor_named_file weapon_handling "" weaponhandling.inc addons/sourcemod/scripting/include/weaponhandling.inc
+    stage_vendor_named_file wyxls_plugins "(Must_Install) BasicEnvs" defib_fix.txt addons/sourcemod/gamedata/defib_fix.txt
+    stage_vendor_named_file weapon_handling "" WeaponHandling.txt addons/sourcemod/gamedata/WeaponHandling.txt
+    stage_vendor_named_file wyxls_plugins "(Must_Install) BasicEnvs" survivor_afk_fix.txt addons/sourcemod/gamedata/survivor_afk_fix.txt
+
+    while IFS= read -r -d "" package; do
+        rsync -a "${package}/" "${TEMP_DIR}/vendor-overlay/addons/sourcemod/scripting/include/"
+    done < <(find "${TEMP_DIR}/multicolors" -type d -path "*/scripting/include" -print0)
+
+    for package in "${fbef_plugins[@]}"; do
+        IFS="|" read -r key source_name output_name <<<"${package}"
+        compile_vendor_plugin fbef_phase1 "${source_name}" "${output_name}" "${key}"
     done
 
-    # The remaining fixed sources may publish either a runtime plugin or a
-    # source/include pair. Install every runtime companion when present.
-    for key in dual_primary predicaments votekick no_friendly_fire smac; do
-        find "${TEMP_DIR}/${key}" -type f -name '*.smx' -exec install -m 0644 {} "${GAME_DIR}/addons/sourcemod/plugins/" \;
-        find "${TEMP_DIR}/${key}" -type d -name gamedata -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/gamedata/" \;
-        find "${TEMP_DIR}/${key}" -type d -name data -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/data/" \;
-        find "${TEMP_DIR}/${key}" -type d -name translations -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/translations/" \;
-        find "${TEMP_DIR}/${key}" -type d -name configs -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/configs/" \;
-        find "${TEMP_DIR}/${key}" -type d -name cfg -exec rsync -a {}/ "${GAME_DIR}/cfg/" \;
-        find "${TEMP_DIR}/${key}" -type d -path '*/scripting/include' -exec rsync -a {}/ "${GAME_DIR}/addons/sourcemod/scripting/include/" \;
-    done
-
-    # MultiColors is an include-only dependency required while compiling SMAC.
-    # Preserve its nested multicolors/ directory because multicolors.inc imports it.
-    while IFS= read -r -d '' package_dir; do
-        rsync -a "${package_dir}/" "${GAME_DIR}/addons/sourcemod/scripting/include/"
-    done < <(find "${TEMP_DIR}/multicolors" -type d -path '*/scripting/include' -print0)
-
-    # These pinned repositories publish source only. Compile the exact runtime
-    # profile after all includes are installed and replace plugins atomically.
+    grep -Eq '^#define[[:space:]]+PLUGIN_VERSION[[:space:]]+"1\.0\.7"' \
+        "$(find "${TEMP_DIR}/weapon_handling" -type f -name WeaponHandling.sp -print -quit)" \
+        || die "WeaponHandling source is not the required 1.0.7."
+    compile_vendor_plugin wyxls_plugins Defib_Fix.sp Defib_Fix.smx "(Must_Install) BasicEnvs"
+    compile_vendor_plugin weapon_handling WeaponHandling.sp WeaponHandling.smx
+    compile_vendor_plugin wyxls_plugins survivor_afk_fix.sp survivor_afk_fix.smx "(Must_Install) BasicEnvs"
+    compile_vendor_plugin no_friendly_fire no_friendly-fire.sp no_friendly-fire.smx
     compile_vendor_plugin dual_primary dual_primaries.sp dual_primaries.smx
     compile_vendor_plugin votekick l4d_votekick.sp l4d_votekick.smx
     compile_vendor_plugin smac smac.sp smac.smx
@@ -580,20 +766,23 @@ install_gameplay_packages() {
     compile_vendor_plugin smac smac_l4d2_fixes.sp smac_l4d2_fixes.smx
     compile_vendor_plugin smac smac_speedhack.sp smac_speedhack.smx
 
-    # Publish the selected vendor profile only after every source compiled.
-    for base in dual_primaries.smx l4d_votekick.smx smac.smx smac_aimbot.smx \
-        smac_commands.smx smac_cvars.smx smac_l4d2_fixes.smx smac_speedhack.smx; do
-        install -m 0644 "${TEMP_DIR}/vendor-smx/${base}" "${GAME_DIR}/addons/sourcemod/plugins/${base}"
+    for output_name in "${vendor_outputs[@]}"; do
+        [[ -f "${TEMP_DIR}/vendor-smx/${output_name}" ]] || die "Staged vendor output is missing: ${output_name}"
+    done
+    rsync -a "${TEMP_DIR}/vendor-overlay/" "${GAME_DIR}/"
+    install -d "${GAME_DIR}/addons/sourcemod/plugins"
+    for output_name in "${vendor_outputs[@]}"; do
+        install -m 0644 "${TEMP_DIR}/vendor-smx/${output_name}" "${GAME_DIR}/addons/sourcemod/plugins/${output_name}"
     done
 
-    # Keep the project-owned pve_pvpve profile and all private/runtime data.
-    log "Installed fixed-source gameplay packages and companion files."
+    log "Installed the explicit vendor allowlist after all selected sources compiled."
 }
 
 compile_plugins() {
     local scripting="${GAME_DIR}/addons/sourcemod/scripting"
     local compiler="${scripting}/spcomp"
     local plugins="${GAME_DIR}/addons/sourcemod/plugins"
+    local stage_dir="${TEMP_DIR}/project-smx"
     local failures=0
     local item source relative output temp_output compile_log
     local -a warning_flags=()
@@ -609,24 +798,38 @@ compile_plugins() {
         "l4d2_pve_help_menu.sp:l4d2_pve_help_menu.smx"
         "l4d2_pve_infected_core.sp:l4d2_pve_infected_core.smx"
         "l4d2_switch_upgrade_ammo.sp:l4d2_switch_ammo.smx"
-        "third_party/dual_primaries.sp:dual_primaries.smx"
         "third_party/l4d2_double_jump.sp:l4d2_double_jump.smx"
         "third_party/miuwiki_autoscar.sp:miuwiki_autoscar.smx"
         "l4d2_pve_damage_display.sp:l4d2_pve_damage_display.smx"
         "l4d2_playable_witch.sp:l4d2_playable_witch.smx"
         "l4d2_pve_mutant_tanks.sp:l4d2_pve_mutant_tanks.smx"
         "third_party/command_buffer.sp:command_buffer.smx"
+        "third_party/spawn_infected_nolimit.sp:spawn_infected_nolimit.smx"
+        "third_party/l4dinfectedbots.sp:l4dinfectedbots.smx"
+        "third_party/l4d_reservedslots.sp:l4d_reservedslots.smx"
+        "third_party/l4d_kickloadstuckers.sp:l4d_kickloadstuckers.smx"
+        "third_party/l4d_switch_team_survivor_dead_fix.sp:l4d_switch_team_survivor_dead_fix.smx"
+        "third_party/jockey_ride_team_switch_teleport_fix.sp:jockey_ride_team_switch_teleport_fix.smx"
+        "third_party/physics_object_pushfix.sp:physics_object_pushfix.smx"
+        "l4d2_pve_server_hud.sp:l4d2_pve_server_hud.smx"
+        "l4d2_pve_director_controller.sp:l4d2_pve_director_controller.smx"
+        "l4d2_pve_antirush.sp:l4d2_pve_antirush.smx"
+        "l4d2_pve_perf_guard.sp:l4d2_pve_perf_guard.smx"
+        "l4d2_pve_corpse_cleaner.sp:l4d2_pve_corpse_cleaner.smx"
+        "l4d2_pve_overdrive.sp:l4d2_pve_overdrive.smx"
+        "l4d2_restart_empty.sp:l4d2_restart_empty.smx"
     )
 
     [[ -x "${compiler}" ]] || die "SourcePawn compiler is missing: ${compiler}"
     install -d -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" "${plugins}"
-    log "Compiling project SourcePawn plugins. Existing SMX files are replaced only after success."
+    install -d "${stage_dir}"
+    log "Compiling all project SourcePawn plugins into an atomic staging directory."
 
     for item in "${entries[@]}"; do
         relative="${item%%:*}"
         output="${item##*:}"
         source="${scripting}/${relative}"
-        temp_output="${TEMP_DIR}/${output}"
+        temp_output="${stage_dir}/${output}"
         compile_log="${TEMP_DIR}/${output}.log"
 
         if [[ ! -f "${source}" ]]; then
@@ -642,12 +845,16 @@ compile_plugins() {
         if (cd "${scripting}" && "${compiler}" \
                 -i"${scripting}/include" "${warning_flags[@]}" \
                 "${relative}" -o"${temp_output}") >"${compile_log}" 2>&1; then
-            install -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" -m 0644 \
-                "${temp_output}" "${plugins}/${output}"
-            log "Compiled ${relative} -> ${output}"
+            if grep -Eiq '(^|[^a-z])warning([[:space:]]+[0-9]+|s?:)' "${compile_log}"; then
+                failures=$((failures + 1))
+                warn "Compilation emitted warnings for ${relative}; no staged project plugin will be published."
+                sed -n '1,160p' "${compile_log}" >&2
+                continue
+            fi
+            log "Staged ${relative} -> ${output}"
         else
             failures=$((failures + 1))
-            warn "Compilation failed for ${relative}; retained the existing ${output}."
+            warn "Compilation failed for ${relative}; no staged project plugin will be published."
             sed -n '1,160p' "${compile_log}" >&2
         fi
     done
@@ -655,6 +862,17 @@ compile_plugins() {
     if (( failures > 0 )); then
         die "${failures} 个必需 SourcePawn 插件缺失或编译失败；已保留旧 SMX，停止部署。"
     fi
+
+    for item in "${entries[@]}"; do
+        output="${item##*:}"
+        [[ -f "${stage_dir}/${output}" ]] || die "Staged project output is missing: ${output}"
+    done
+    for item in "${entries[@]}"; do
+        output="${item##*:}"
+        install -o "${SERVICE_USER}" -g "${SERVICE_GROUP}" -m 0644 \
+            "${stage_dir}/${output}" "${plugins}/${output}"
+    done
+    log "Published the complete project plugin set after every compile succeeded."
 }
 
 write_private_configuration() {
@@ -772,7 +990,7 @@ Group=l4d2srv
 WorkingDirectory=/opt/l4d2/server
 EnvironmentFile=/etc/l4d2/l4d2.env
 ExecStart=/opt/l4d2/scripts/start_server.sh
-Restart=on-failure
+Restart=always
 RestartSec=5
 LimitNOFILE=65536
 KillSignal=SIGINT
@@ -862,10 +1080,15 @@ main() {
     disable_incompatible_runtime_entries
     if [[ "${SKIP_FRAMEWORKS}" != "1" ]]; then
         install_gameplay_packages
+        # Vendor bundles may overwrite reviewed source/includes. Reassert the
+        # project-owned policy patch before compilation.
+        sync_project_tree
     fi
+    disable_incompatible_runtime_entries
     write_private_configuration
     install_steamclient_link
     compile_plugins
+    validate_runtime_ownership
     install_services
     start_services
 

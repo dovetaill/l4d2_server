@@ -12,7 +12,7 @@
 #include <l4d2_playable_witch>
 #include <l4d2_pve_mutant_tanks>
 
-#define PLUGIN_VERSION "1.1.0"
+#define PLUGIN_VERSION "1.2.0"
 #define TEAM_SURVIVOR 2
 #define TEAM_INFECTED 3
 #define ZOMBIE_WITCH 7
@@ -61,6 +61,7 @@ ConVar g_cvAdminTankMenu;
 ConVar g_cvAdminWitchMenu;
 ConVar g_cvAdminWitchPlaceholder;
 ConVar g_cvAdminTankSpawnDelay;
+ConVar g_cvGameplayWrites;
 
 char g_sTankTypeNames[MT_MAXTYPES + 1][64];
 
@@ -142,6 +143,7 @@ public void OnPluginStart()
     g_cvAdminWitchMenu = CreateConVar("l4d2_pve_admin_witch_menu", "1", "Show the administrator Witch management entry.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
     g_cvAdminWitchPlaceholder = CreateConVar("l4d2_pve_admin_witch_placeholder", "1", "Show the Witch takeover compatibility placeholder when no playable Witch API is available.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
     g_cvAdminTankSpawnDelay = CreateConVar("l4d2_pve_admin_tank_spawn_delay", "0.25", "Delay before applying the selected Mutant Tank type after an admin Tank spawn.", FCVAR_NOTIFY, true, 0.0, true, 2.0);
+    g_cvGameplayWrites = CreateConVar("l4d2_pve_admin_gameplay_write_enable", "0", "Allow direct SI/Tank/Witch spawn, horde, clear, and Tank takeover maintenance actions.", FCVAR_NOTIFY, true, 0.0, true, 1.0);
 
     AutoExecConfig(true, "l4d2_pve_admin");
     RefreshMutantTankTypeNames();
@@ -445,6 +447,10 @@ public Action Command_PveSetPoints(int client, int args)
 
 public Action Command_PveSpawn(int client, int args)
 {
+    if (!AdminGameplayWritesEnabled(client))
+    {
+        return Plugin_Handled;
+    }
     if (!IsValidClient(client) || args < 1)
     {
         ReplyToCommand(client, "[PVE] Usage in-game: sm_pvespawn <smoker|boomer|hunter|spitter|jockey|charger|tank|witch>");
@@ -462,6 +468,10 @@ public Action Command_PveSpawn(int client, int args)
 
 public Action Command_PveTank(int client, int args)
 {
+    if (!AdminGameplayWritesEnabled(client))
+    {
+        return Plugin_Handled;
+    }
     if (args < 2)
     {
         ReplyToCommand(client, "[PVE] Usage: sm_pvetank <target> <type>");
@@ -502,6 +512,10 @@ public Action Command_PveWitch(int client, int args)
 
 public Action Command_PveHorde(int client, int args)
 {
+    if (!AdminGameplayWritesEnabled(client))
+    {
+        return Plugin_Handled;
+    }
     ServerCommand("director_force_panic");
     ServerExecute();
     ReplyToCommand(client, "[PVE] Director panic event requested.");
@@ -782,23 +796,24 @@ void ShowBossAdminMenu(int client)
 
     Menu menu = new Menu(MenuHandler_BossAdmin);
     menu.SetTitle("Tank / Witch 管理");
+    int writeDraw = g_cvGameplayWrites.BoolValue ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED;
     if (g_cvAdminTankMenu.BoolValue)
     {
         if (MutantTanksApiAvailable())
         {
-            menu.AddItem("tank_types", "Mutant Tanks：选择 Tank 类型");
+            menu.AddItem("tank_types", "Mutant Tanks：选择 Tank 类型", writeDraw);
         }
         else
         {
             menu.AddItem("tank_types", "Tank 类型选择不可用（Mutant Tanks 未加载）", ITEMDRAW_DISABLED);
         }
     }
-    menu.AddItem("tank_normal", "兼容：生成普通 Tank");
+    menu.AddItem("tank_normal", "兼容：生成普通 Tank", writeDraw);
     if (g_cvAdminWitchMenu.BoolValue)
     {
         menu.AddItem("witch", "Witch 管理入口");
     }
-    menu.AddItem("clear_tank", "清除全部 Tank");
+    menu.AddItem("clear_tank", "清除全部 Tank", writeDraw);
     menu.ExitBackButton = true;
     menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -1043,8 +1058,8 @@ void ShowWitchAdminMenu(int client)
         return;
     }
 
-    bool canSpawn = GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitch") == FeatureStatus_Available;
-    bool canSpawnBride = GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitchBride") == FeatureStatus_Available;
+    bool canSpawn = g_cvGameplayWrites.BoolValue && GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitch") == FeatureStatus_Available;
+    bool canSpawnBride = g_cvGameplayWrites.BoolValue && GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitchBride") == FeatureStatus_Available;
     bool canControl = PlayableWitchApiAvailable();
     Menu menu = new Menu(MenuHandler_WitchAdmin);
     menu.SetTitle("Witch 管理（管理员专用）");
@@ -1115,17 +1130,18 @@ void ShowInfectedMenu(int client)
 {
     Menu menu = new Menu(MenuHandler_Infected);
     menu.SetTitle("感染者 / Boss 测试");
-    menu.AddItem("smoker", "Spawn Smoker");
-    menu.AddItem("boomer", "Spawn Boomer");
-    menu.AddItem("hunter", "Spawn Hunter");
-    menu.AddItem("spitter", "Spawn Spitter");
-    menu.AddItem("jockey", "Spawn Jockey");
-    menu.AddItem("charger", "Spawn Charger");
-    menu.AddItem("tank", "Spawn Tank");
-    menu.AddItem("witch", "Spawn Witch");
-    menu.AddItem("horde", "触发普通尸潮");
-    menu.AddItem("clear_si", "清除全部普通特感");
-    menu.AddItem("clear_tank", "清除全部 Tank");
+    int writeDraw = g_cvGameplayWrites.BoolValue ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED;
+    menu.AddItem("smoker", "Spawn Smoker", writeDraw);
+    menu.AddItem("boomer", "Spawn Boomer", writeDraw);
+    menu.AddItem("hunter", "Spawn Hunter", writeDraw);
+    menu.AddItem("spitter", "Spawn Spitter", writeDraw);
+    menu.AddItem("jockey", "Spawn Jockey", writeDraw);
+    menu.AddItem("charger", "Spawn Charger", writeDraw);
+    menu.AddItem("tank", "Spawn Tank", writeDraw);
+    menu.AddItem("witch", "Spawn Witch", writeDraw);
+    menu.AddItem("horde", "触发普通尸潮", writeDraw);
+    menu.AddItem("clear_si", "清除全部普通特感", writeDraw);
+    menu.AddItem("clear_tank", "清除全部 Tank", writeDraw);
     menu.ExitBackButton = true;
     menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -1145,6 +1161,11 @@ public int MenuHandler_Infected(Menu menu, MenuAction action, int client, int it
     }
     else if (action == MenuAction_Select)
     {
+        if (!AdminGameplayWritesEnabled(client))
+        {
+            ShowInfectedMenu(client);
+            return 0;
+        }
         char info[32];
         menu.GetItem(item, info, sizeof(info));
         if (StrEqual(info, "horde"))
@@ -1182,7 +1203,17 @@ void ShowMaintenanceMenu(int client)
 {
     Menu menu = new Menu(MenuHandler_Maintenance);
     menu.SetTitle("服务器维护 / 信息");
-    menu.AddItem("info", "查看服务器状态");
+    menu.AddItem("info", "服务器总览");
+    menu.AddItem("director", "Dynamic Director 状态");
+    menu.AddItem("antirush", "AntiRush 状态");
+    menu.AddItem("hud", "全局 HUD 状态");
+    menu.AddItem("witch", "Witch Lottery 状态");
+    menu.AddItem("overdrive", "Overdrive 状态");
+    menu.AddItem("performance", "Performance / Entity 状态");
+    menu.AddItem("corpse", "Corpse Cleaner 状态");
+    menu.AddItem("slots", "管理员预留位状态");
+    menu.AddItem("restart", "空服重启状态");
+    menu.AddItem("safearea", "安全门 Owner 状态");
     menu.AddItem("reload_shop", "重载战役商城");
     menu.AddItem("reload_admins", "重载管理员缓存");
     menu.ExitBackButton = true;
@@ -1209,6 +1240,46 @@ public int MenuHandler_Maintenance(Menu menu, MenuAction action, int client, int
         if (StrEqual(info, "info"))
         {
             PrintPveInfo(client);
+        }
+        else if (StrEqual(info, "director"))
+        {
+            PrintDirectorStatus(client);
+        }
+        else if (StrEqual(info, "antirush"))
+        {
+            PrintAntiRushStatus(client);
+        }
+        else if (StrEqual(info, "hud"))
+        {
+            PrintHudStatus(client);
+        }
+        else if (StrEqual(info, "witch"))
+        {
+            PrintWitchStatus(client);
+        }
+        else if (StrEqual(info, "overdrive"))
+        {
+            PrintOverdriveStatus(client);
+        }
+        else if (StrEqual(info, "performance"))
+        {
+            PrintPerformanceStatus(client);
+        }
+        else if (StrEqual(info, "corpse"))
+        {
+            PrintCorpseStatus(client);
+        }
+        else if (StrEqual(info, "slots"))
+        {
+            PrintReservedSlotStatus(client);
+        }
+        else if (StrEqual(info, "restart"))
+        {
+            PrintRestartStatus(client);
+        }
+        else if (StrEqual(info, "safearea"))
+        {
+            PrintSafeareaStatus(client);
         }
         else if (StrEqual(info, "reload_shop"))
         {
@@ -1458,6 +1529,10 @@ bool GetConfiguredTankTypeName(int type, char[] buffer, int size)
 
 bool SpawnAdminTank(int admin, int type, int takeoverTarget)
 {
+    if (!AdminGameplayWritesEnabled(admin))
+    {
+        return false;
+    }
     if (!IsValidClient(admin) || !MutantTanksApiAvailable())
     {
         return false;
@@ -1562,6 +1637,10 @@ public Action Timer_TakeoverSpawnedTank(Handle timer, DataPack pack)
 
 void TakeOverAdminTank(int admin, int type)
 {
+    if (!AdminGameplayWritesEnabled(admin))
+    {
+        return;
+    }
     if (!IsValidClient(admin) || !MutantTanksApiAvailable())
     {
         return;
@@ -1647,6 +1726,10 @@ bool TransferTankToAdmin(int admin, int tank)
 
 void SpawnWitchForAdmin(int admin, bool bride)
 {
+    if (!AdminGameplayWritesEnabled(admin))
+    {
+        return;
+    }
     if (!IsValidClient(admin))
     {
         return;
@@ -1704,6 +1787,10 @@ int FindLiveTank()
 
 bool SpawnByToken(int admin, const char[] token)
 {
+    if (!AdminGameplayWritesEnabled(admin))
+    {
+        return false;
+    }
     if (!IsValidClient(admin))
     {
         return false;
@@ -1810,6 +1897,142 @@ void PrintPveInfo(int client)
     ReplyToCommand(client, "[PVE] map=%s survivors=%d SI=%d tanks=%d shop_api=%s", map, survivors, special, tanks, ShopApiAvailable() ? "yes" : "no");
 }
 
+void PrintDirectorStatus(int client)
+{
+    char profile[24];
+    GetCvarText("l4d2_pve_director_profile", profile, sizeof(profile));
+    ReplyToCommand(client, "[PVE/Director] profile=%s target=%d slot_capacity=%d hard_cap=%d evaluate=%.1fs",
+        profile,
+        GetCvarInt("l4d2_pve_director_target", -1),
+        GetCvarInt("l4d2_pve_director_slot_capacity", -1),
+        GetCvarInt("l4d2_pve_director_hard_cap", -1),
+        GetCvarFloat("l4d2_pve_director_evaluate_rate", -1.0));
+}
+
+void PrintAntiRushStatus(int client)
+{
+    char status[24];
+    GetCvarText("l4d2_pve_antirush_status", status, sizeof(status));
+    ReplyToCommand(client, "[PVE/AntiRush] enabled=%d status=%s warning=%.0f/%.0f%% severe=%.0f/%.0f%%",
+        GetCvarInt("l4d2_pve_antirush_enable", -1), status,
+        GetCvarFloat("l4d2_pve_antirush_warning_units", -1.0),
+        GetCvarFloat("l4d2_pve_antirush_warning_percent", -1.0) * 100.0,
+        GetCvarFloat("l4d2_pve_antirush_severe_units", -1.0),
+        GetCvarFloat("l4d2_pve_antirush_severe_percent", -1.0) * 100.0);
+}
+
+void PrintHudStatus(int client)
+{
+    ReplyToCommand(client, "[PVE/HUD] enabled=%d refresh=%.1fs command=!hud",
+        GetCvarInt("l4d2_pve_server_hud_enable", -1),
+        GetCvarFloat("l4d2_pve_server_hud_rate", -1.0));
+}
+
+void PrintWitchStatus(int client)
+{
+    ReplyToCommand(client, "[PVE/Witch] enabled=%d api=%s chance=%.0f%% flow=%.0f-%.0f%% max=%d",
+        GetCvarInt("pve_playable_witch_enable", -1), PlayableWitchApiAvailable() ? "ready" : "unavailable",
+        GetCvarFloat("pve_playable_witch_random_chance", -1.0),
+        GetCvarFloat("pve_playable_witch_lottery_flow_min", -1.0),
+        GetCvarFloat("pve_playable_witch_lottery_flow_max", -1.0),
+        GetCvarInt("pve_playable_witch_max", -1));
+}
+
+void PrintOverdriveStatus(int client)
+{
+    ReplyToCommand(client, "[PVE/Overdrive] enabled=%d duration=%.0fs cooldown=%.0fs WeaponHandling=%s",
+        GetCvarInt("l4d2_pve_overdrive_enable", -1),
+        GetCvarFloat("l4d2_pve_overdrive_duration", -1.0),
+        GetCvarFloat("l4d2_pve_overdrive_cooldown", -1.0),
+        LibraryExists("WeaponHandling") ? "ready" : "missing");
+}
+
+void PrintPerformanceStatus(int client)
+{
+    char risk[16];
+    char profile[24];
+    GetCvarText("l4d2_pve_perf_guard_risk", risk, sizeof(risk));
+    GetCvarText("l4d2_pve_director_profile", profile, sizeof(profile));
+    ReplyToCommand(client, "[PVE/Performance] humans=%d MaxClients=%d entities=%d risk=%s profile=%s SI_target=%d common_limit=%d",
+        CountConnectedHumans(), MaxClients, GetEntityCount(), risk, profile,
+        GetCvarInt("l4d2_pve_director_target", -1), GetCvarInt("z_common_limit", -1));
+}
+
+void PrintCorpseStatus(int client)
+{
+    ReplyToCommand(client, "[PVE/Corpse] enabled=%d common_delay=%.1fs removed_this_map=%d survivor_cleanup=disabled",
+        GetCvarInt("l4d2_pve_corpse_cleaner_enable", -1),
+        GetCvarFloat("l4d2_pve_corpse_cleaner_common_delay", -1.0),
+        GetCvarInt("l4d2_pve_corpse_cleaner_removed", -1));
+}
+
+void PrintReservedSlotStatus(int client)
+{
+    ReplyToCommand(client, "[PVE/Slots] humans=%d public=%d reserved=%d hidden=%d MaxClients=%d safety_headroom=%d",
+        CountConnectedHumans(), GetCvarInt("pve_public_human_slots", -1),
+        GetCvarInt("pve_admin_reserved_slots", -1),
+        GetCvarInt("pve_admin_reserved_slots_hide", -1), MaxClients,
+        GetCvarInt("l4d2_pve_director_engine_headroom", -1));
+}
+
+void PrintRestartStatus(int client)
+{
+    char state[24];
+    GetCvarText("l4d2_restart_empty_state", state, sizeof(state));
+    ReplyToCommand(client, "[PVE/RestartEmpty] enabled=%d state=%s grace=%.0fs minimum_interval=%.0fs",
+        GetCvarInt("l4d2_restart_empty_enable", -1), state,
+        GetCvarFloat("l4d2_restart_empty_grace", -1.0),
+        GetCvarFloat("l4d2_restart_empty_min_interval", -1.0));
+}
+
+void PrintSafeareaStatus(int client)
+{
+    char opener[MAX_NAME_LENGTH];
+    char state[32];
+    GetCvarText("l4d2_safearea_opener_name", opener, sizeof(opener));
+    GetCvarText("l4d2_safearea_gate_status", state, sizeof(state));
+    ReplyToCommand(client, "[PVE/Safearea] opener=%s state=%s opener_timeout=%.0fs final_ratio=%.0f%% near=%.0f",
+        opener, state, GetCvarFloat("l4d2_safearea_opener_timeout", -1.0),
+        GetCvarFloat("l4d2_safearea_final_gate_ratio", -1.0) * 100.0,
+        GetCvarFloat("l4d2_safearea_final_gate_near_distance", -1.0));
+}
+
+void GetCvarText(const char[] name, char[] value, int maxLength)
+{
+    ConVar cvar = FindConVar(name);
+    if (cvar == null)
+    {
+        strcopy(value, maxLength, "UNAVAILABLE");
+        return;
+    }
+    cvar.GetString(value, maxLength);
+}
+
+int GetCvarInt(const char[] name, int fallback)
+{
+    ConVar cvar = FindConVar(name);
+    return cvar == null ? fallback : cvar.IntValue;
+}
+
+float GetCvarFloat(const char[] name, float fallback)
+{
+    ConVar cvar = FindConVar(name);
+    return cvar == null ? fallback : cvar.FloatValue;
+}
+
+int CountConnectedHumans()
+{
+    int count;
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        if (IsClientConnected(client) && !IsFakeClient(client))
+        {
+            count++;
+        }
+    }
+    return count;
+}
+
 int FindSingleTarget(int client, int argIndex)
 {
     char targetArg[MAX_TARGET_LENGTH], targetName[MAX_TARGET_LENGTH];
@@ -1851,6 +2074,16 @@ bool IsValidTarget(int admin, int target)
         return false;
     }
     return true;
+}
+
+bool AdminGameplayWritesEnabled(int client)
+{
+    if (g_cvGameplayWrites != null && g_cvGameplayWrites.BoolValue)
+    {
+        return true;
+    }
+    ReplyToCommand(client, "[PVE] Direct gameplay writes are disabled by the production ownership policy.");
+    return false;
 }
 
 bool IsValidClient(int client)

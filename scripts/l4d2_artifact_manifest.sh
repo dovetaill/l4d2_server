@@ -76,7 +76,12 @@ l4d2_manifest_add \
     wyxls_plugins \
     'https://codeload.github.com/wyxls/SourceModPlugins-L4D2/tar.gz/c1d14e5f06368363d6800311db752ef6e6b22eda' \
     '68e941c69e352b79558407f35b24f679b2b0be615af0f3b8b0cadd2dc6b73004' \
-    wyxls-SourceModPlugins-L4D2-c1d14e5f.tar.gz tar.gz 'wyxls Automatic Weapons and Gear Transfer' 'wyxls commit c1d14e5f06368363d6800311db752ef6e6b22eda'
+    wyxls-SourceModPlugins-L4D2-c1d14e5f.tar.gz tar.gz 'wyxls Automatic Weapons, Defib Fix and Survivor AFK Fix sources' 'wyxls commit c1d14e5f06368363d6800311db752ef6e6b22eda'
+l4d2_manifest_add \
+    weapon_handling \
+    'https://codeload.github.com/LuxLuma/Weapon_Handling_API/tar.gz/90391e079d0dd3b0c1c98d786372f28e7d6536e8' \
+    '41c378ee0ff5e87041c3febcf9a4866e7928d81c2ec8287765b7cd4c88d504d5' \
+    weapon-handling-api-1.0.7-90391e07.tar.gz tar.gz 'WeaponHandling API 1.0.7 source' 'LuxLuma commit 90391e079d0dd3b0c1c98d786372f28e7d6536e8; GPL-3.0'
 l4d2_manifest_add \
     dual_primary \
     'https://codeload.github.com/DrStr4Nge147/L4D2-DualPrimary-Plugin/tar.gz/83e2b71c0b21e2a6291b066f903c6af18254a90c' \
@@ -107,6 +112,12 @@ l4d2_manifest_add \
     'https://codeload.github.com/srcdslab/sm-plugin-MultiColors/tar.gz/d2f2dc9126255571c0fc4499d5729cacb57265ca' \
     'e02900f8df929481ce968f9ac0b551be59526e7d43731215f7c513da51b8c8f6' \
     multicolors-d2f2dc91.tar.gz tar.gz 'MultiColors include snapshot' 'srcdslab commit d2f2dc9126255571c0fc4499d5729cacb57265ca'
+
+l4d2_manifest_add \
+    fbef_phase1 \
+    'https://codeload.github.com/fbef0102/L4D1_2-Plugins/tar.gz/e0fd18072b82498ed98535329f8b581262a8ff19' \
+    'e01da86bd27378055010a6c2a3e83a128bdbdef9d8371c5140105847fef64ea3' \
+    fbef0102-e0fd1807.tar.gz tar.gz 'fbef0102 public phase-1 source components' 'fbef0102 commit e0fd18072b82498ed98535329f8b581262a8ff19; local policy patches are tracked in Git'
 
 l4d2_manifest_keys() {
     printf '%s\n' "${L4D2_ARTIFACT_KEYS[@]}"

@@ -3,6 +3,7 @@
 
 #include <sourcemod>
 #include <sdktools>
+#undef REQUIRE_PLUGIN
 #include <dual_primaries>
 
 #define TEAM_SURVIVOR 2
@@ -13,8 +14,8 @@ public Plugin myinfo =
 {
     name = "L4D2 Switch Upgrade Ammo",
     author = "Codex",
-    description = "Shift+Reload switching with continuous incendiary and explosive ammo",
-    version = "1.2.0",
+    description = "Shift+Reload switching with event-driven incendiary and explosive ammo refill",
+    version = "1.3.0",
     url = ""
 };
 
@@ -22,9 +23,7 @@ ConVar g_hEnable;
 ConVar g_hInfinite;
 ConVar g_hInfiniteUpgradeEnable;
 ConVar g_hInfiniteUpgradeCount;
-ConVar g_hInfiniteUpgradeInterval;
 
-Handle g_hUpgradeAmmoTimer;
 bool g_bCooldown[MAXPLAYERS + 1];
 ArrayList g_hLimitedWeapons;
 ArrayList g_hInfiniteWeapons;
@@ -48,10 +47,7 @@ public void OnPluginStart()
     g_hInfinite = CreateConVar("l4d2_switch_ammo_infinite_load", "1", "Keep a large upgraded-ammo counter when switching.", _, true, 0.0, true, 1.0);
     g_hInfiniteUpgradeEnable = CreateConVar("l4d2_switch_ammo_infinite_upgrade_enable", "1", "Keep picked-up incendiary and explosive ammo replenished.", _, true, 0.0, true, 1.0);
     g_hInfiniteUpgradeCount = CreateConVar("l4d2_switch_ammo_infinite_upgrade_count", "999", "Special ammo count to restore for incendiary and explosive weapons.", _, true, 1.0, true, 9999.0);
-    g_hInfiniteUpgradeInterval = CreateConVar("l4d2_switch_ammo_infinite_upgrade_interval", "0.10", "Seconds between special ammo replenishment checks.", _, true, 0.05, true, 1.0);
-    HookConVarChange(g_hEnable, ConVarChanged_AmmoFeature);
-    HookConVarChange(g_hInfiniteUpgradeEnable, ConVarChanged_AmmoFeature);
-    HookConVarChange(g_hInfiniteUpgradeInterval, ConVarChanged_AmmoInterval);
+    HookEvent("weapon_fire", Event_WeaponFire, EventHookMode_Post);
     AutoExecConfig(true, "l4d2_switch_ammo");
 }
 
@@ -62,14 +58,8 @@ public void OnMapStart()
     g_hInfiniteClipSizes.Clear();
 }
 
-public void OnConfigsExecuted()
-{
-    RestartUpgradeAmmoTimer();
-}
-
 public void OnPluginEnd()
 {
-    StopUpgradeAmmoTimer();
     delete g_hLimitedWeapons;
     delete g_hInfiniteWeapons;
     delete g_hInfiniteClipSizes;
@@ -190,63 +180,38 @@ public Action Timer_ClearCooldown(Handle timer, int serial)
     return Plugin_Stop;
 }
 
-public void ConVarChanged_AmmoFeature(ConVar convar, const char[] oldValue, const char[] newValue)
+public void Event_WeaponFire(Event event, const char[] name, bool dontBroadcast)
 {
-    RestartUpgradeAmmoTimer();
-}
-
-public void ConVarChanged_AmmoInterval(ConVar convar, const char[] oldValue, const char[] newValue)
-{
-    RestartUpgradeAmmoTimer();
-}
-
-void RestartUpgradeAmmoTimer()
-{
-    StopUpgradeAmmoTimer();
-
     if (!g_hEnable.BoolValue || !g_hInfiniteUpgradeEnable.BoolValue)
     {
         return;
     }
 
-    g_hUpgradeAmmoTimer = CreateTimer(g_hInfiniteUpgradeInterval.FloatValue, Timer_RefillUpgradeAmmo, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-}
-
-void StopUpgradeAmmoTimer()
-{
-    if (g_hUpgradeAmmoTimer != null)
+    int client = GetClientOfUserId(event.GetInt("userid"));
+    if (IsValidSurvivor(client) && IsPlayerAlive(client))
     {
-        delete g_hUpgradeAmmoTimer;
-        g_hUpgradeAmmoTimer = null;
+        RequestFrame(Frame_RefillUpgradeAmmo, GetClientSerial(client));
     }
 }
 
-public Action Timer_RefillUpgradeAmmo(Handle timer)
+public void Frame_RefillUpgradeAmmo(any serial)
 {
     if (!g_hEnable.BoolValue || !g_hInfiniteUpgradeEnable.BoolValue)
     {
-        g_hUpgradeAmmoTimer = null;
-        return Plugin_Stop;
+        return;
     }
 
-    int amount = g_hInfiniteUpgradeCount.IntValue;
-    for (int client = 1; client <= MaxClients; client++)
+    int client = GetClientFromSerial(serial);
+    if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
     {
-        if (!IsValidSurvivor(client) || !IsPlayerAlive(client))
-        {
-            continue;
-        }
-
-        RefillUpgradeAmmoInSlot(client, 0, amount);
-        RefillUpgradeAmmoInSlot(client, 1, amount);
+        return;
     }
 
-    return Plugin_Continue;
+    RefillUpgradeAmmoWeapon(GetEntPropEnt(client, Prop_Send, "m_hActiveWeapon"), g_hInfiniteUpgradeCount.IntValue);
 }
 
-void RefillUpgradeAmmoInSlot(int client, int slot, int amount)
+void RefillUpgradeAmmoWeapon(int weapon, int amount)
 {
-    int weapon = GetPlayerWeaponSlot(client, slot);
     if (weapon <= MaxClients || !IsValidEntity(weapon) || !HasEntProp(weapon, Prop_Send, "m_upgradeBitVec") || !HasEntProp(weapon, Prop_Send, "m_nUpgradedPrimaryAmmoLoaded"))
     {
         return;

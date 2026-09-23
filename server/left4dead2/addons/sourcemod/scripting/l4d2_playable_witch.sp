@@ -7,11 +7,12 @@
 #include <left4dhooks>
 #include <l4d2_playable_witch>
 
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.1.0"
 #define TEAM_SPECTATOR 1
 #define TEAM_SURVIVOR 2
 #define TEAM_INFECTED 3
 #define ZC_SMOKER 1
+#define ZC_TANK 8
 
 public Plugin myinfo =
 {
@@ -34,15 +35,21 @@ ConVar g_cvRageSpeed;
 ConVar g_cvRageDuration;
 ConVar g_cvRageCooldown;
 ConVar g_cvRandomChance;
+ConVar g_cvLotteryFlowMin;
+ConVar g_cvLotteryFlowMax;
 
 int g_iWitch[MAXPLAYERS + 1];
+int g_iActiveController;
 int g_iCamera[MAXPLAYERS + 1];
 int g_iLastButtons[MAXPLAYERS + 1];
+int g_iOriginalTeam[MAXPLAYERS + 1];
+int g_iSurvivorBot[MAXPLAYERS + 1];
 PlayableWitchSource g_iSource[MAXPLAYERS + 1];
 float g_fNextAttack[MAXPLAYERS + 1];
 float g_fNextRage[MAXPLAYERS + 1];
 float g_fRageUntil[MAXPLAYERS + 1];
-bool g_bRandomAttempted[MAXPLAYERS + 1];
+bool g_bLotteryAttempted;
+bool g_bLotteryOptIn[MAXPLAYERS + 1];
 bool g_bCleaning[MAXPLAYERS + 1];
 StringMap g_hChapterPurchases;
 Handle g_hHudTimer;
@@ -57,6 +64,10 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int errMax)
     MarkNativeAsOptional("L4D2_SpawnWitch");
     MarkNativeAsOptional("L4D_ReplaceWithBot");
     MarkNativeAsOptional("L4D_CullZombie");
+    MarkNativeAsOptional("L4D_SetHumanSpec");
+    MarkNativeAsOptional("L4D_TakeOverBot");
+    MarkNativeAsOptional("L4D2_GetFurthestSurvivorFlow");
+    MarkNativeAsOptional("L4D2Direct_GetMapMaxFlowDistance");
     MarkNativeAsOptional("L4D_SetClass");
     MarkNativeAsOptional("L4D_BecomeGhost");
     MarkNativeAsOptional("L4D_State_Transition");
@@ -76,7 +87,9 @@ public void OnPluginStart()
     g_cvRageSpeed = CreateConVar("pve_playable_witch_rage_speed", "1.30", "Mild E rage movement multiplier.", FCVAR_NOTIFY, true, 1.0, true, 1.75);
     g_cvRageDuration = CreateConVar("pve_playable_witch_rage_duration", "4.0", "Mild E rage duration.", FCVAR_NOTIFY, true, 0.1, true, 10.0);
     g_cvRageCooldown = CreateConVar("pve_playable_witch_rage_cooldown", "24.0", "Mild E rage cooldown.", FCVAR_NOTIFY, true, 1.0, true, 120.0);
-    g_cvRandomChance = CreateConVar("pve_playable_witch_random_chance", "2.5", "Per-chapter random Witch chance for an infected Ghost.", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+    g_cvRandomChance = CreateConVar("pve_playable_witch_random_chance", "35.0", "One free playable Witch lottery chance per chapter.", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+    g_cvLotteryFlowMin = CreateConVar("pve_playable_witch_lottery_flow_min", "25.0", "Minimum map flow percentage for the chapter Witch lottery.", FCVAR_NOTIFY, true, 0.0, true, 100.0);
+    g_cvLotteryFlowMax = CreateConVar("pve_playable_witch_lottery_flow_max", "80.0", "Maximum map flow percentage for the chapter Witch lottery.", FCVAR_NOTIFY, true, 0.0, true, 100.0);
 
     HookConVarChange(g_cvEnabled, ConVarChanged_Enabled);
     HookEvent("round_end", Event_Cleanup, EventHookMode_PostNoCopy);
@@ -84,13 +97,14 @@ public void OnPluginStart()
     HookEvent("finale_win", Event_Cleanup, EventHookMode_PostNoCopy);
     HookEvent("finale_vehicle_leaving", Event_Cleanup, EventHookMode_PostNoCopy);
     HookEvent("player_team", Event_PlayerTeam, EventHookMode_Post);
-    HookEvent("ghost_spawn_time", Event_GhostSpawnTime, EventHookMode_Post);
 
+    RegConsoleCmd("sm_witchqueue", Command_WitchQueue, "Join the chapter playable Witch lottery.");
+    RegConsoleCmd("sm_nowitch", Command_NoWitch, "Leave the chapter playable Witch lottery.");
     RegAdminCmd("sm_playablewitch", Command_PlayableWitch, ADMFLAG_SLAY, "sm_playablewitch <target>");
     RegAdminCmd("sm_pvewitch_validate", Command_Validate, ADMFLAG_CONFIG, "Validate playable Witch dependencies and state.");
     RegAdminCmd("sm_pvewitch_selftest", Command_SelfTest, ADMFLAG_CONFIG, "Spawn and remove a real Witch entity to validate the module.");
     g_hChapterPurchases = new StringMap();
-    g_hHudTimer = CreateTimer(0.25, Timer_Hud, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+    EnsureHudTimer();
     AutoExecConfig(true, "l4d2_playable_witch");
 }
 
@@ -104,10 +118,8 @@ public void OnPluginEnd()
 public void OnMapStart()
 {
     g_hChapterPurchases.Clear();
-    for (int client = 1; client <= MaxClients; client++)
-    {
-        g_bRandomAttempted[client] = false;
-    }
+    g_bLotteryAttempted = false;
+    EnsureHudTimer();
 }
 
 public void OnMapEnd()
@@ -118,7 +130,18 @@ public void OnMapEnd()
 public void OnClientDisconnect(int client)
 {
     EndControl(client, true, false, "disconnect");
-    g_bRandomAttempted[client] = false;
+    g_bLotteryOptIn[client] = false;
+    g_iOriginalTeam[client] = 0;
+    g_iSurvivorBot[client] = 0;
+}
+
+public void OnClientPutInServer(int client)
+{
+    if (!IsFakeClient(client))
+    {
+        g_bLotteryOptIn[client] = true;
+        EnsureHudTimer();
+    }
 }
 
 public void ConVarChanged_Enabled(ConVar convar, const char[] oldValue, const char[] newValue)
@@ -184,18 +207,33 @@ public Action Command_PlayableWitch(int client, int args)
 
 public Action Command_Validate(int client, int args)
 {
-    int active;
-    for (int target = 1; target <= MaxClients; target++)
-    {
-        if (IsControlling(target))
-        {
-            active++;
-        }
-    }
-    ReplyToCommand(client, "[PVE] Playable Witch: enabled=%d spawn_native=%d active=%d/%d real_entity_control=1 class7_player=0.",
+    int active = CountControllers();
+    ReplyToCommand(client, "[PVE] Playable Witch: enabled=%d spawn_native=%d active=%d/%d lottery_attempted=%d flow=%.1f%% real_entity_control=1 class7_player=0.",
         g_cvEnabled.BoolValue,
         GetFeatureStatus(FeatureType_Native, "L4D2_SpawnWitch") == FeatureStatus_Available,
-        active, g_cvMaxPlayers.IntValue);
+        active, g_cvMaxPlayers.IntValue, g_bLotteryAttempted, GetCurrentFlowPercent());
+    return Plugin_Handled;
+}
+
+public Action Command_WitchQueue(int client, int args)
+{
+    if (!IsRealClient(client))
+    {
+        return Plugin_Handled;
+    }
+    g_bLotteryOptIn[client] = true;
+    ReplyToCommand(client, "[Witch] 已加入本章免费 Witch 抽奖候选池。");
+    return Plugin_Handled;
+}
+
+public Action Command_NoWitch(int client, int args)
+{
+    if (!IsRealClient(client))
+    {
+        return Plugin_Handled;
+    }
+    g_bLotteryOptIn[client] = false;
+    ReplyToCommand(client, "[Witch] 已退出本章免费 Witch 抽奖候选池。");
     return Plugin_Handled;
 }
 
@@ -268,31 +306,6 @@ public void Event_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
     }
 }
 
-public void Event_GhostSpawnTime(Event event, const char[] name, bool dontBroadcast)
-{
-    int client = GetClientOfUserId(event.GetInt("userid"));
-    if (!IsRealClient(client) || g_bRandomAttempted[client] || g_cvRandomChance.FloatValue <= 0.0)
-    {
-        return;
-    }
-
-    g_bRandomAttempted[client] = true;
-    if (GetRandomFloat(0.0, 100.0) <= g_cvRandomChance.FloatValue)
-    {
-        CreateTimer(0.2, Timer_RandomWitch, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
-    }
-}
-
-public Action Timer_RandomWitch(Handle timer, int userid)
-{
-    int client = GetClientOfUserId(userid);
-    if (IsRealClient(client) && GetClientTeam(client) == TEAM_INFECTED && IsGhost(client))
-    {
-        BeginControl(client, PlayableWitchSource_Random);
-    }
-    return Plugin_Stop;
-}
-
 bool BeginControl(int client, PlayableWitchSource source)
 {
     if (source < PlayableWitchSource_Purchase || source > PlayableWitchSource_Random
@@ -307,18 +320,21 @@ bool BeginControl(int client, PlayableWitchSource source)
     }
 
     int team = GetClientTeam(client);
+    if (team != TEAM_SURVIVOR && team != TEAM_INFECTED)
+    {
+        return false;
+    }
     if (source == PlayableWitchSource_Purchase
         && (team != TEAM_INFECTED || (!IsGhost(client) && !IsPlayerAlive(client))))
     {
         return false;
     }
-    if (source == PlayableWitchSource_Random
-        && (team != TEAM_INFECTED || !IsGhost(client)))
+    if (source == PlayableWitchSource_Random && !IsLotteryCandidate(client))
     {
         return false;
     }
 
-    if (team == TEAM_SURVIVOR && GetFeatureStatus(FeatureType_Native, "L4D_ReplaceWithBot") != FeatureStatus_Available)
+    if (team == TEAM_SURVIVOR && !HasSurvivorRestoreNatives())
     {
         return false;
     }
@@ -344,18 +360,6 @@ bool BeginControl(int client, PlayableWitchSource source)
     {
         SetEntProp(witch, Prop_Data, "m_iMaxHealth", g_cvHealth.IntValue);
     }
-    SDKHook(witch, SDKHook_OnTakeDamagePost, OnWitchDamagedPost);
-
-    if (team == TEAM_SURVIVOR)
-    {
-        L4D_ReplaceWithBot(client);
-    }
-    else if (GetClientTeam(client) == TEAM_INFECTED && IsPlayerAlive(client) && !IsGhost(client))
-    {
-        L4D_CullZombie(client);
-    }
-    ChangeClientTeam(client, TEAM_SPECTATOR);
-
     int camera = CreateEntityByName("info_target");
     if (camera <= MaxClients || !DispatchSpawn(camera))
     {
@@ -364,12 +368,38 @@ bool BeginControl(int client, PlayableWitchSource source)
             RemoveEntity(camera);
         }
         RemoveEntity(witch);
-        ReturnToGhost(client);
         return false;
     }
 
+    int survivorBot;
+    if (team == TEAM_SURVIVOR)
+    {
+        L4D_ReplaceWithBot(client);
+        survivorBot = FindSurvivorBotForClient(client);
+        if (survivorBot == 0)
+        {
+            survivorBot = FindFreeSurvivorBot();
+        }
+        if (survivorBot == 0)
+        {
+            RemoveEntity(camera);
+            RemoveEntity(witch);
+            LogError("Playable Witch refused Survivor %N: no restorable Survivor Bot after L4D_ReplaceWithBot.", client);
+            return false;
+        }
+    }
+    else if (IsPlayerAlive(client) && !IsGhost(client))
+    {
+        L4D_CullZombie(client);
+    }
+    ChangeClientTeam(client, TEAM_SPECTATOR);
+
+    SDKHook(witch, SDKHook_OnTakeDamagePost, OnWitchDamagedPost);
     g_iWitch[client] = witch;
+    g_iActiveController = client;
     g_iCamera[client] = camera;
+    g_iOriginalTeam[client] = team;
+    g_iSurvivorBot[client] = survivorBot;
     g_iSource[client] = source;
     g_iLastButtons[client] = 0;
     g_fNextAttack[client] = 0.0;
@@ -382,7 +412,7 @@ bool BeginControl(int client, PlayableWitchSource source)
     {
         RecordChapterPurchase(client);
     }
-    PrintToChat(client, "\x04[Witch]\x01 Mouse1 攻击，Space 跳跃，E 短时狂暴。死亡后返回普通感染者 Ghost。");
+    PrintToChat(client, "\x04[Witch]\x01 Mouse1 攻击，Space 跳跃，E 短时狂暴。结束后恢复原队伍。");
     LogMessage("Playable Witch started: client=%N source=%d entity=%d", client, source, witch);
     return true;
 }
@@ -393,6 +423,13 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     if (!IsControlling(client))
     {
         return Plugin_Continue;
+    }
+
+    float now = GetGameTime();
+    if (g_fRageUntil[client] > 0.0 && now >= g_fRageUntil[client])
+    {
+        SetEntityRenderColor(g_iWitch[client], 255, 255, 255, 255);
+        g_fRageUntil[client] = 0.0;
     }
 
     int witch = g_iWitch[client];
@@ -440,25 +477,10 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
     }
 
     TeleportEntity(witch, NULL_VECTOR, yaw, velocity);
+    UpdateCamera(client);
     g_iLastButtons[client] = buttons;
     buttons &= ~(IN_ATTACK | IN_ATTACK2 | IN_USE);
     return Plugin_Changed;
-}
-
-public void OnGameFrame()
-{
-    for (int client = 1; client <= MaxClients; client++)
-    {
-        if (IsControlling(client))
-        {
-            UpdateCamera(client);
-            if (g_fRageUntil[client] > 0.0 && GetGameTime() >= g_fRageUntil[client])
-            {
-                SetEntityRenderColor(g_iWitch[client], 255, 255, 255, 255);
-                g_fRageUntil[client] = 0.0;
-            }
-        }
-    }
 }
 
 public void OnWitchDamagedPost(int victim, int attacker, int inflictor, float damage, int damagetype)
@@ -498,18 +520,24 @@ public Action L4D2_OnEntityShoved(int client, int entity, int weapon, float vecD
 
 public Action Timer_Hud(Handle timer)
 {
-    float now = GetGameTime();
-    for (int client = 1; client <= MaxClients; client++)
+    if (CountRealClients() == 0)
     {
-        if (!IsControlling(client))
-        {
-            continue;
-        }
-        int health = GetEntProp(g_iWitch[client], Prop_Data, "m_iHealth");
-        float attack = g_fNextAttack[client] > now ? g_fNextAttack[client] - now : 0.0;
-        float rage = g_fNextRage[client] > now ? g_fNextRage[client] - now : 0.0;
-        PrintHintText(client, "WITCH HP %d | 攻击 %.1fs | 狂暴 %.1fs\nMouse1 攻击  Space 跳跃  E 狂暴", health, attack, rage);
+        g_hHudTimer = null;
+        return Plugin_Stop;
     }
+
+    MaybeRunChapterLottery();
+    int client = g_iActiveController;
+    if (!IsControlling(client))
+    {
+        return Plugin_Continue;
+    }
+
+    float now = GetGameTime();
+    int health = GetEntProp(g_iWitch[client], Prop_Data, "m_iHealth");
+    float attack = g_fNextAttack[client] > now ? g_fNextAttack[client] - now : 0.0;
+    float rage = g_fNextRage[client] > now ? g_fNextRage[client] - now : 0.0;
+    PrintHintText(client, "WITCH HP %d | 攻击 %.1fs | 狂暴 %.1fs\nMouse1 攻击  Space 跳跃  E 狂暴", health, attack, rage);
     return Plugin_Continue;
 }
 
@@ -630,8 +658,16 @@ void EndControl(int client, bool removeWitch, bool returnGhost, const char[] rea
 
     int witch = g_iWitch[client];
     int camera = g_iCamera[client];
+    int originalTeam = g_iOriginalTeam[client];
+    int survivorBot = g_iSurvivorBot[client];
     g_iWitch[client] = 0;
+    if (g_iActiveController == client)
+    {
+        g_iActiveController = 0;
+    }
     g_iCamera[client] = 0;
+    g_iOriginalTeam[client] = 0;
+    g_iSurvivorBot[client] = 0;
     g_iLastButtons[client] = 0;
     g_fRageUntil[client] = 0.0;
 
@@ -648,7 +684,11 @@ void EndControl(int client, bool removeWitch, bool returnGhost, const char[] rea
         SDKUnhook(witch, SDKHook_OnTakeDamagePost, OnWitchDamagedPost);
         RemoveEntity(witch);
     }
-    if (returnGhost && IsRealClient(client))
+    if (IsRealClient(client) && originalTeam == TEAM_SURVIVOR)
+    {
+        RestoreSurvivor(client, survivorBot);
+    }
+    else if (returnGhost && IsRealClient(client) && originalTeam == TEAM_INFECTED)
     {
         ReturnToGhost(client);
     }
@@ -658,16 +698,31 @@ void EndControl(int client, bool removeWitch, bool returnGhost, const char[] rea
 
 void CleanupAll(bool removeWitch, bool returnGhost, const char[] reason)
 {
-    for (int client = 1; client <= MaxClients; client++)
-    {
-        EndControl(client, removeWitch, returnGhost, reason);
-    }
+    EndControl(g_iActiveController, removeWitch, returnGhost, reason);
 }
 
 void ReturnToGhost(int client)
 {
     ChangeClientTeam(client, TEAM_INFECTED);
     RequestFrame(Frame_ReturnToGhost, GetClientUserId(client));
+}
+
+void RestoreSurvivor(int client, int survivorBot)
+{
+    if (!IsFreeOrOwnedSurvivorBot(survivorBot, client))
+    {
+        survivorBot = FindFreeSurvivorBot();
+    }
+    if (survivorBot == 0 || !HasSurvivorRestoreNatives())
+    {
+        LogError("Playable Witch could not restore Survivor %N: no available Survivor Bot.", client);
+        return;
+    }
+
+    ChangeClientTeam(client, TEAM_SPECTATOR);
+    L4D_SetHumanSpec(survivorBot, client);
+    L4D_TakeOverBot(client);
+    PrintToChat(client, "\x04[Witch]\x01 Witch 已结束，你已接回 Survivor Bot。");
 }
 
 public void Frame_ReturnToGhost(int userid)
@@ -720,12 +775,114 @@ bool IsGhost(int client)
     return HasEntProp(client, Prop_Send, "m_isGhost") && GetEntProp(client, Prop_Send, "m_isGhost") != 0;
 }
 
-int CountControllers()
+bool HasSurvivorRestoreNatives()
+{
+    return GetFeatureStatus(FeatureType_Native, "L4D_ReplaceWithBot") == FeatureStatus_Available
+        && GetFeatureStatus(FeatureType_Native, "L4D_SetHumanSpec") == FeatureStatus_Available
+        && GetFeatureStatus(FeatureType_Native, "L4D_TakeOverBot") == FeatureStatus_Available;
+}
+
+bool IsLotteryCandidate(int client)
+{
+    if (!IsRealClient(client) || !g_bLotteryOptIn[client] || IsControlling(client))
+    {
+        return false;
+    }
+
+    int team = GetClientTeam(client);
+    if (team == TEAM_SURVIVOR)
+    {
+        return IsPlayerAlive(client) && HasSurvivorRestoreNatives();
+    }
+    if (team != TEAM_INFECTED)
+    {
+        return false;
+    }
+    if (IsPlayerAlive(client) && !IsGhost(client))
+    {
+        return GetZombieClass(client) != ZC_TANK
+            && GetFeatureStatus(FeatureType_Native, "L4D_CullZombie") == FeatureStatus_Available;
+    }
+    return IsGhost(client);
+}
+
+void MaybeRunChapterLottery()
+{
+    if (g_bLotteryAttempted || !IsModuleAvailable() || g_cvRandomChance.FloatValue <= 0.0
+        || CountControllers() > 0 || !IsLotteryFlowWindow())
+    {
+        return;
+    }
+
+    int candidates[MAXPLAYERS];
+    int count;
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        if (IsLotteryCandidate(client))
+        {
+            candidates[count++] = client;
+        }
+    }
+    if (count == 0)
+    {
+        return;
+    }
+
+    g_bLotteryAttempted = true;
+    float roll = GetRandomFloat(0.0, 100.0);
+    if (roll > g_cvRandomChance.FloatValue)
+    {
+        LogMessage("Playable Witch chapter lottery: no winner (roll %.2f > %.2f).", roll, g_cvRandomChance.FloatValue);
+        return;
+    }
+
+    int winner = candidates[GetRandomInt(0, count - 1)];
+    if (BeginControl(winner, PlayableWitchSource_Random))
+    {
+        PrintToChatAll("\x04[Witch]\x01 %N 被本章免费 Witch 抽奖选中。", winner);
+    }
+    else
+    {
+        LogError("Playable Witch chapter lottery selected %N but control could not start.", winner);
+    }
+}
+
+bool IsLotteryFlowWindow()
+{
+    float flow = GetCurrentFlowPercent();
+    return flow >= g_cvLotteryFlowMin.FloatValue && flow <= g_cvLotteryFlowMax.FloatValue;
+}
+
+float GetCurrentFlowPercent()
+{
+    if (GetFeatureStatus(FeatureType_Native, "L4D2_GetFurthestSurvivorFlow") != FeatureStatus_Available
+        || GetFeatureStatus(FeatureType_Native, "L4D2Direct_GetMapMaxFlowDistance") != FeatureStatus_Available)
+    {
+        return -1.0;
+    }
+    float maxFlow = L4D2Direct_GetMapMaxFlowDistance();
+    return maxFlow > 0.0 ? (L4D2_GetFurthestSurvivorFlow() / maxFlow) * 100.0 : -1.0;
+}
+
+int GetZombieClass(int client)
+{
+    return HasEntProp(client, Prop_Send, "m_zombieClass") ? GetEntProp(client, Prop_Send, "m_zombieClass") : 0;
+}
+
+void EnsureHudTimer()
+{
+    if (g_hHudTimer == null && CountRealClients() > 0)
+    {
+        g_hHudTimer = CreateTimer(1.0, Timer_Hud, _, TIMER_REPEAT);
+    }
+}
+
+int CountRealClients()
 {
     int count;
     for (int client = 1; client <= MaxClients; client++)
     {
-        if (IsControlling(client))
+        if (IsRealClient(client))
         {
             count++;
         }
@@ -733,14 +890,63 @@ int CountControllers()
     return count;
 }
 
-int FindController(int witch)
+int FindSurvivorBotForClient(int owner)
 {
+    int userid = GetClientUserId(owner);
     for (int client = 1; client <= MaxClients; client++)
     {
-        if (g_iWitch[client] == witch)
+        if (!IsClientInGame(client) || !IsFakeClient(client) || GetClientTeam(client) != TEAM_SURVIVOR
+            || !HasEntProp(client, Prop_Send, "m_humanSpectatorUserID"))
+        {
+            continue;
+        }
+        int linked = GetEntProp(client, Prop_Send, "m_humanSpectatorUserID");
+        if (linked == owner || linked == userid)
         {
             return client;
         }
+    }
+    return 0;
+}
+
+int FindFreeSurvivorBot()
+{
+    for (int client = 1; client <= MaxClients; client++)
+    {
+        if (IsFreeOrOwnedSurvivorBot(client, 0))
+        {
+            return client;
+        }
+    }
+    return 0;
+}
+
+bool IsFreeOrOwnedSurvivorBot(int client, int owner)
+{
+    if (client < 1 || client > MaxClients || !IsClientInGame(client) || !IsFakeClient(client)
+        || GetClientTeam(client) != TEAM_SURVIVOR)
+    {
+        return false;
+    }
+    if (!HasEntProp(client, Prop_Send, "m_humanSpectatorUserID"))
+    {
+        return true;
+    }
+    int linked = GetEntProp(client, Prop_Send, "m_humanSpectatorUserID");
+    return linked == 0 || (owner > 0 && (linked == owner || linked == GetClientUserId(owner)));
+}
+
+int CountControllers()
+{
+    return IsControlling(g_iActiveController) ? 1 : 0;
+}
+
+int FindController(int entity)
+{
+    int client = g_iActiveController;
+    if (client > 0 && (g_iWitch[client] == entity || g_iCamera[client] == entity))
+    {
+        return client;
     }
     return 0;
 }

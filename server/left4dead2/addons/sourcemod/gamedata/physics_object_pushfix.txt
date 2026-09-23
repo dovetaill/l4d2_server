@@ -1,0 +1,39 @@
+"Games"
+{
+    "#default"
+    {
+        "Functions"
+        {
+            "MovePropAway"
+            {
+                "signature" "MovePropAway"
+                "callconv" "cdecl"
+                "return" "bool"
+                "this" "ignore"
+                "arguments"
+                {
+                    "PhysicsProp"
+                    {
+                        "type" "cbaseentity"
+                    }
+                    "TerrorPlayer"
+                    {
+                        "type" "cbaseentity"
+                    }
+                }
+            }
+        }
+    }
+    "left4dead2"
+    {
+        "Signatures"
+        {
+            "MovePropAway"
+            {
+                "library" "server"
+                "linux" "@_Z12MovePropAwayP11CBaseEntityP11CBasePlayer"
+                "windows" "\x55\x8B\xEC\x83\xEC\x48\x53\x56\x8B\x75\x08"
+            }
+        }
+    }
+}

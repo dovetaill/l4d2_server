@@ -65,6 +65,13 @@ server/left4dead2/addons/sourcemod/scripting/*
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_damage_display.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_playable_witch.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_pve_mutant_tanks.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_server_hud.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_director_controller.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_antirush.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_perf_guard.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_corpse_cleaner.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_pve_overdrive.sp
+!server/left4dead2/addons/sourcemod/scripting/l4d2_restart_empty.sp
 !server/left4dead2/addons/sourcemod/scripting/l4d2_switch_upgrade_ammo.sp
 !server/left4dead2/addons/sourcemod/scripting/include/
 !server/left4dead2/addons/sourcemod/scripting/third_party/
@@ -74,12 +81,24 @@ server/left4dead2/addons/sourcemod/scripting/include/*
 !server/left4dead2/addons/sourcemod/scripting/include/miuwiki_autoscar.inc
 !server/left4dead2/addons/sourcemod/scripting/include/l4d2_playable_witch.inc
 !server/left4dead2/addons/sourcemod/scripting/include/l4d2_pve_mutant_tanks.inc
+!server/left4dead2/addons/sourcemod/scripting/include/l4d2_pve_director_controller.inc
+!server/left4dead2/addons/sourcemod/scripting/include/l4dinfectedbots.inc
+!server/left4dead2/addons/sourcemod/scripting/include/spawn_infected_nolimit.inc
+!server/left4dead2/addons/sourcemod/scripting/include/dual_primaries.inc
+!server/left4dead2/addons/sourcemod/scripting/include/l4d2_pve_overdrive.inc
 
 server/left4dead2/addons/sourcemod/scripting/third_party/*
 !server/left4dead2/addons/sourcemod/scripting/third_party/dual_primaries.sp
 !server/left4dead2/addons/sourcemod/scripting/third_party/l4d2_double_jump.sp
 !server/left4dead2/addons/sourcemod/scripting/third_party/miuwiki_autoscar.sp
 !server/left4dead2/addons/sourcemod/scripting/third_party/command_buffer.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/l4d_reservedslots.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/l4d_kickloadstuckers.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/l4d_switch_team_survivor_dead_fix.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/jockey_ride_team_switch_teleport_fix.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/physics_object_pushfix.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/l4dinfectedbots.sp
+!server/left4dead2/addons/sourcemod/scripting/third_party/spawn_infected_nolimit.sp
 
 # Reviewed upstream gamedata for the command buffer fixer.
 !server/left4dead2/addons/sourcemod/gamedata/
@@ -87,6 +106,14 @@ server/left4dead2/addons/sourcemod/gamedata/*
 !server/left4dead2/addons/sourcemod/gamedata/command_buffer.games.txt
 !server/left4dead2/addons/sourcemod/gamedata/miuwiki_autoscar.txt
 !server/left4dead2/addons/sourcemod/gamedata/l4d2_automatic_weapons.txt
+!server/left4dead2/addons/sourcemod/gamedata/physics_object_pushfix.txt
+!server/left4dead2/addons/sourcemod/gamedata/l4dinfectedbots.txt
+!server/left4dead2/addons/sourcemod/gamedata/spawn_infected_nolimit.txt
+
+# Reviewed translations required by curated third-party plugins.
+!server/left4dead2/addons/sourcemod/translations/
+server/left4dead2/addons/sourcemod/translations/*
+!server/left4dead2/addons/sourcemod/translations/l4d_reservedslots.phrases.txt
 
 # Server configuration maintained by this project.
 server/left4dead2/cfg/*
@@ -98,6 +125,11 @@ server/left4dead2/cfg/*
 
 server/left4dead2/cfg/sourcemod/*
 !server/left4dead2/cfg/sourcemod/l4d2_campaign_shop.cfg
+!server/left4dead2/cfg/sourcemod/no_friendly-fire.cfg
+!server/left4dead2/cfg/sourcemod/WeaponHandling.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_balancer_spawn_dyn.cfg
+!server/left4dead2/cfg/sourcemod/l4d_afk_commands.cfg
+!server/left4dead2/cfg/sourcemod/AI_HardSI/
 !server/left4dead2/cfg/sourcemod/l4d2_automatic_weapons.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_unicode_hostname.cfg
 !server/left4dead2/cfg/sourcemod/miuwiki_autoscar.cfg
@@ -106,10 +138,20 @@ server/left4dead2/cfg/sourcemod/*
 !server/left4dead2/cfg/sourcemod/l4d2_end_safearea_teleport.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_switch_ammo.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_pve_help_menu.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_admin.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_pve_infected_core.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_pve_damage_display.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_playable_witch.cfg
 !server/left4dead2/cfg/sourcemod/l4d2_pve_mutant_tanks.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_server_hud.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_director_controller.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_antirush.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_perf_guard.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_corpse_cleaner.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_pve_overdrive.cfg
+!server/left4dead2/cfg/sourcemod/l4d2_restart_empty.cfg
+!server/left4dead2/cfg/sourcemod/l4d_reservedslots.cfg
+!server/left4dead2/cfg/sourcemod/l4d_kickloadstuckers.cfg
 !server/left4dead2/cfg/sourcemod/double_jump.cfg
 !server/left4dead2/cfg/sourcemod/l4dinfectedbots.cfg
 !server/left4dead2/cfg/sourcemod/l4dmultislots.cfg
@@ -117,6 +159,7 @@ server/left4dead2/cfg/sourcemod/*
 
 # PvPvE runtime data maintained by this project.
 server/left4dead2/addons/sourcemod/data/*
+!server/left4dead2/addons/sourcemod/data/clear_weapon_drop.cfg
 !server/left4dead2/addons/sourcemod/data/l4dinfectedbots/
 server/left4dead2/addons/sourcemod/data/l4dinfectedbots/*
 !server/left4dead2/addons/sourcemod/data/l4dinfectedbots/pve_pvpve.cfg
@@ -151,5 +194,4 @@ __pycache__/
 
 # SourcePawn compile dependencies required by the PvE admin/core plugins.
 !server/left4dead2/addons/sourcemod/scripting/include/left4dhooks*.inc
-!server/left4dead2/addons/sourcemod/scripting/include/l4dinfectedbots.inc
 !server/left4dead2/addons/sourcemod/scripting/include/mutant_tanks.inc

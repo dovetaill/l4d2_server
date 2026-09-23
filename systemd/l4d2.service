@@ -1,0 +1,21 @@
+[Unit]
+Description=Left 4 Dead 2 Dedicated Server
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/opt/l4d2
+
+[Service]
+Type=simple
+User=l4d2srv
+Group=l4d2srv
+WorkingDirectory=/opt/l4d2/server
+EnvironmentFile=/etc/l4d2/l4d2.env
+ExecStart=/opt/l4d2/scripts/start_server.sh
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

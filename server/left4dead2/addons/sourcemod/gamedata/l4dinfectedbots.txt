@@ -1,0 +1,80 @@
+"Games"
+{
+	"left4dead"
+	{
+		"Offsets"
+		{
+			"FlashlightIsOn"
+			{
+				"windows"    "356"
+				"linux"        "357"
+			}
+
+			/*Credit: Psykotikism-Mutant_Tanks*/
+			"Tank::GetIntentionInterface::Intention"
+			{
+				"linux"		"11940"
+				"mac"		"11940"
+				"windows"	"11924"
+			}
+
+			/*Credit: Psykotikism-Mutant_Tanks*/
+			"Action<Tank>::FirstContainedResponder"
+			{
+				"linux"		"2"
+				"mac"		"2"
+				"windows"	"1"
+			}
+
+			/*Credit: Psykotikism-Mutant_Tanks*/
+			"TankIdle::GetName"
+			{
+				"linux"		"36"
+				"mac"		"36"
+				"windows"	"35"
+			}
+		}
+	}
+
+	"left4dead2"
+	{
+		"Signatures"
+		{
+			"FlashLightTurnOn"
+			{
+				"library"	"server"
+				"windows"	"\x55\x8B\xEC\xA1\x2A\x2A\x2A\x2A\x83\xEC\x2A\x83\x78\x2A\x2A\x56\x8B\xF1\x0F\x8E\x2A\x2A\x2A\x2A\x8B\x16"
+				"linux"		"@_ZN9CCSPlayer16FlashlightTurnOnEb"
+				/* by Machine */
+				/* 55 8B EC A1 ? ? ? ? 83 EC ? 83 78 ? ? 56 8B F1 0F 8E ? ? ? ? 8B 16 */
+			}
+		}
+
+		"Offsets"
+		{
+			/*Credit: Psykotikism-Mutant_Tanks*/
+			"Tank::GetIntentionInterface::Intention"
+			{
+				"linux"		"17176"
+				"mac"		"17176"
+				"windows"	"17204"
+			}
+
+			/*Credit: Psykotikism-Mutant_Tanks*/
+			"Action<Tank>::FirstContainedResponder"
+			{
+				"linux"		"2"
+				"mac"		"2"
+				"windows"	"1"
+			}
+
+			/*Credit: Psykotikism-Mutant_Tanks*/
+			"TankIdle::GetName"
+			{
+				"linux"		"41"
+				"mac"		"41"
+				"windows"	"40"
+			}
+		}
+	}
+}

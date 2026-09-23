@@ -1,0 +1,9 @@
+"Phrases"
+{
+    "Message"
+    {
+        "en" "The remaining slot is reserved for administrators."
+        "chi" "剩余位置仅供管理员使用。"
+        "zho" "剩餘位置僅供管理員使用。"
+    }
+}
